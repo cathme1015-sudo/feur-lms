@@ -1,4 +1,4 @@
-const CACHE_NAME = "feur-lms-shell-v1";
+const CACHE_NAME = "feur-lms-shell-v3";
 const ASSETS = ["./", "./index.html", "./api-bridge.js"];
 
 self.addEventListener("install", (event) => {
