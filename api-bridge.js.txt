@@ -1,4 +1,4 @@
-window.FEUR_API_URL = "https://script.google.com/macros/s/AKfycbxYtoiXHUnPuLnQGbfQxbAUfnXXB-JY4TIsR6JG7QRm_MCF77_0TA84PeiPwlenGaW44Q/exec";
+window.FEUR_API_URL = "https://script.google.com/macros/s/AKfycbxKUcZbMsqZ7XohYgB6J_OfMyvESRpKkezuy4Yf3uBEFtyBkkyhLFL7NPzJ7TUKMmfh/exec";
 
 (function () {
   const CACHEABLE_READS = new Set([
