@@ -1,4 +1,4 @@
-window.FEUR_API_URL = "https://script.google.com/macros/s/AKfycbxYtoiXHUnPuLnQGbfQxbAUfnXXB-JY4TIsR6JG7QRm_MCF77_0TA84PeiPwlenGaW44Q/exec";
+window.FEUR_API_URL = "https://script.google.com/macros/s/AKfycbxYtoiXHUnPuLnQGbfQxbAUfnXXB-JY4TlsR6JG7QRm_MCF77_0TA84PeiPwlenGaW44Q/exec";
 
 (function () {
   const CACHEABLE_READS = new Set([
@@ -8,6 +8,8 @@ window.FEUR_API_URL = "https://script.google.com/macros/s/AKfycbxYtoiXHUnPuLnQGb
     "fetchLibraryStatistics",
     "getAttendanceStatistics"
   ]);
+
+  let jsonpCounter = 0;
 
   function serializeFormElement(formEl) {
     return new Promise((resolve, reject) => {
@@ -40,6 +42,63 @@ window.FEUR_API_URL = "https://script.google.com/macros/s/AKfycbxYtoiXHUnPuLnQGb
     });
   }
 
+  function callViaJsonp(payloadObj, timeoutMs) {
+    return new Promise((resolve, reject) => {
+      const cbName = "__feurJsonp_" + Date.now() + "_" + (++jsonpCounter);
+      const script = document.createElement("script");
+      let done = false;
+
+      const timer = setTimeout(() => {
+        if (done) return;
+        done = true;
+        cleanup();
+        reject(new Error("Request timed out. Verify your /exec URL and 'Anyone' access."));
+      }, timeoutMs);
+
+      function cleanup() {
+        clearTimeout(timer);
+        delete window[cbName];
+        if (script.parentNode) script.parentNode.removeChild(script);
+      }
+
+      window[cbName] = function (response) {
+        if (done) return;
+        done = true;
+        cleanup();
+        resolve(response);
+      };
+
+      script.onerror = function () {
+        if (done) return;
+        done = true;
+        cleanup();
+        reject(new Error("Apps Script blocked the request. Check that FEUR_API_URL ends in /exec and 'Who has access' is set to Anyone."));
+      };
+
+      const sep = window.FEUR_API_URL.indexOf("?") === -1 ? "?" : "&";
+      script.src =
+        window.FEUR_API_URL +
+        sep +
+        "callback=" +
+        encodeURIComponent(cbName) +
+        "&payload=" +
+        encodeURIComponent(JSON.stringify(payloadObj));
+
+      document.head.appendChild(script);
+    });
+  }
+
+  async function callViaPost(payloadObj) {
+    const res = await fetch(window.FEUR_API_URL, {
+      method: "POST",
+      redirect: "follow",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify(payloadObj)
+    });
+    const text = await res.text();
+    return JSON.parse(text);
+  }
+
   function createRunner(successHandler, failureHandler, userObject) {
     return new Proxy(function () {}, {
       get(_, prop) {
@@ -69,19 +128,27 @@ window.FEUR_API_URL = "https://script.google.com/macros/s/AKfycbxYtoiXHUnPuLnQGb
             )
           );
 
+          const payloadObj = { fn: fnName, args, libraryKey };
           const cacheKey = "feur_cache_" + libraryKey + "_" + fnName + "_" + JSON.stringify(args);
 
           try {
-            const res = await fetch(window.FEUR_API_URL, {
-              method: "POST",
-              redirect: "follow",
-              headers: { "Content-Type": "text/plain;charset=utf-8" },
-              body: JSON.stringify({ fn: fnName, args, libraryKey })
-            });
+            if (!window.FEUR_API_URL || !window.FEUR_API_URL.endsWith("/exec")) {
+              throw new Error("FEUR_API_URL in api-bridge.js must end with /exec.");
+            }
 
-            const data = await res.json();
-            if (!data.ok) {
-              throw new Error(data.error || "Server error");
+            const serialized = JSON.stringify(payloadObj);
+            const data =
+              serialized.length > 1800
+                ? await callViaPost(payloadObj)
+                : await callViaJsonp(payloadObj, 20000);
+
+            if (!data || !data.ok) {
+              throw new Error((data && data.error) || "Server error");
+            }
+
+            // Override appUrl so library selection stays on GitHub Pages
+            if (fnName === "setActiveLibrary" && data.result) {
+              data.result.appUrl = window.location.origin + window.location.pathname;
             }
 
             if (CACHEABLE_READS.has(fnName)) {
@@ -92,6 +159,8 @@ window.FEUR_API_URL = "https://script.google.com/macros/s/AKfycbxYtoiXHUnPuLnQGb
               successHandler(data.result, userObject);
             }
           } catch (err) {
+            const message = err && err.message ? err.message : String(err);
+
             if (CACHEABLE_READS.has(fnName)) {
               const cached = localStorage.getItem(cacheKey);
               if (cached && typeof successHandler === "function") {
@@ -99,10 +168,14 @@ window.FEUR_API_URL = "https://script.google.com/macros/s/AKfycbxYtoiXHUnPuLnQGb
                 return;
               }
             }
+
             if (typeof failureHandler === "function") {
-              failureHandler(err, userObject);
+              failureHandler(new Error(message), userObject);
             } else {
-              console.error("API call failed (" + fnName + "):", err);
+              console.error("API call failed (" + fnName + "):", message);
+              if (typeof window.showToast === "function") {
+                window.showToast("Connection error (" + fnName + "): " + message, "error", 6000);
+              }
             }
           }
         };
