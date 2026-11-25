@@ -187,3 +187,115 @@ window.FEUR_API_URL = "https://script.google.com/macros/s/AKfycbxYtoiXHUnPuLnQGb
   window.google.script = window.google.script || {};
   window.google.script.run = createRunner(null, null, null);
 })();
+(function initCatalogLibraryAutoSync() {
+  function getCurrentLibraryKey() {
+    const headerSelect = document.getElementById("activeLibrarySelect");
+    if (headerSelect && headerSelect.value) {
+      return String(headerSelect.value).toUpperCase();
+    }
+    const stored = localStorage.getItem("FEUR_ACTIVE_LIBRARY");
+    if (stored === "HIGH_SCHOOL" || stored === "ELEMENTARY") {
+      return stored;
+    }
+    const indicator = document.getElementById("activeLibraryIndicator");
+    if (indicator && /high\s*school/i.test(indicator.textContent || "")) {
+      return "HIGH_SCHOOL";
+    }
+    return "ELEMENTARY";
+  }
+
+  function findCatalogLibrarySelect() {
+    const byId =
+      document.getElementById("bookLibraryBranch") ||
+      document.getElementById("catalogLibraryBranch");
+    if (byId) return byId;
+
+    const groups = document.querySelectorAll("#tab-cataloging .form-group");
+    for (const group of groups) {
+      const lbl = group.querySelector("label");
+      const sel = group.querySelector("select");
+      if (lbl && sel && /^library$/i.test((lbl.textContent || "").trim())) {
+        return sel;
+      }
+    }
+
+    const selects = document.querySelectorAll("#tab-cataloging select");
+    for (const sel of selects) {
+      const hasBranchOption = Array.from(sel.options || []).some((opt) =>
+        /elementary library|high school library/i.test(opt.text || opt.value)
+      );
+      if (hasBranchOption) return sel;
+    }
+    return null;
+  }
+
+  function syncCatalogLibraryDropdown(force) {
+    const editMode = document.getElementById("bookEditMode");
+    if (!force && editMode && editMode.value === "1") return;
+
+    const select = findCatalogLibrarySelect();
+    if (!select || !select.options || select.options.length === 0) return;
+
+    const key = getCurrentLibraryKey();
+    const targetLabel =
+      key === "HIGH_SCHOOL" ? "High School Library" : "Elementary Library";
+
+    const match = Array.from(select.options).find(
+      (opt) =>
+        opt.value === targetLabel ||
+        opt.value.toUpperCase() === key ||
+        (opt.text || "").trim().toLowerCase() === targetLabel.toLowerCase()
+    );
+
+    if (match && select.value !== match.value) {
+      select.value = match.value;
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+  }
+
+  window.syncCatalogLibraryDropdown = syncCatalogLibraryDropdown;
+
+  function attachCatalogSyncListeners() {
+    syncCatalogLibraryDropdown(false);
+
+    const catalogingTab = document.getElementById("tab-cataloging");
+    if (catalogingTab) {
+      const observer = new MutationObserver((mutations) => {
+        const hasNewNodes = mutations.some(
+          (m) => m.addedNodes && m.addedNodes.length > 0
+        );
+        if (hasNewNodes) syncCatalogLibraryDropdown(false);
+      });
+      observer.observe(catalogingTab, { childList: true, subtree: true });
+    }
+
+    const headerSelect = document.getElementById("activeLibrarySelect");
+    if (headerSelect) {
+      headerSelect.addEventListener("change", () => {
+        setTimeout(() => syncCatalogLibraryDropdown(false), 50);
+      });
+    }
+
+    const bookForm = document.getElementById("newBookForm");
+    if (bookForm) {
+      bookForm.addEventListener("reset", () => {
+        setTimeout(() => syncCatalogLibraryDropdown(true), 0);
+      });
+    }
+
+    document.addEventListener("click", (e) => {
+      const trigger = e.target.closest(
+        '[onclick*="cataloging"], [onclick*="cancelCatalogEdit"]'
+      );
+      if (trigger) {
+        setTimeout(() => syncCatalogLibraryDropdown(false), 60);
+      }
+    });
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", attachCatalogSyncListeners);
+  } else {
+    attachCatalogSyncListeners();
+  }
+})();
