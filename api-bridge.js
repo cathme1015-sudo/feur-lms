@@ -1,4 +1,4 @@
-window.FEUR_API_URL = "https://script.google.com/macros/s/AKfycbxYtoiXHUnPuLnQGbfQxbAUfnXXB-JY4TIsR6JG7QRm_MCF77_0TA84PeiPwlenGaW44Q/exec";
+window.FEUR_API_URL = "https://script.google.com/macros/s/AKfycbxYtoiXHUnPuLnQGbfQxbAUfnXXB-JY4TlsR6JG7QRm_MCF77_0TA84PeiPwlenGaW44Q/exec";
 
 (function () {
   const CACHEABLE_READS = new Set([
@@ -116,12 +116,9 @@ window.FEUR_API_URL = "https://script.google.com/macros/s/AKfycbxYtoiXHUnPuLnQGb
           const fnName = String(prop);
           const libraryKey = localStorage.getItem("FEUR_ACTIVE_LIBRARY") || "ELEMENTARY";
 
-          if (fnName === "setActiveLibrary" && data.result) {
-            Object.keys(localStorage).forEach((k) => {
-           if (k.startsWith("feur_cache_")) localStorage.removeItem(k);
-        });
-        data.result.appUrl = window.location.origin + window.location.pathname;
-        }
+          if (fnName === "setActiveLibrary" && rawArgs[0]) {
+            localStorage.setItem("FEUR_ACTIVE_LIBRARY", String(rawArgs[0]).toUpperCase());
+          }
 
           const args = await Promise.all(
             rawArgs.map((arg) =>
@@ -150,38 +147,15 @@ window.FEUR_API_URL = "https://script.google.com/macros/s/AKfycbxYtoiXHUnPuLnQGb
             }
 
             if (fnName === "setActiveLibrary" && data.result && data.result.success) {
-  localStorage.setItem(
-    "FEUR_ACTIVE_LIBRARY",
-    String(data.result.libraryKey || rawArgs[0] || "ELEMENTARY").toUpperCase()
-  );
-  Object.keys(localStorage).forEach((k) => {
-    if (k.startsWith("feur_cache_")) localStorage.removeItem(k);
-  });
-  data.result.appUrl = window.location.origin + window.location.pathname;
-}
-
-const isCatalogSave =
-  (fnName === "saveBookToInventory" || fnName === "updateLibraryItem") &&
-  data.result &&
-  data.result.success;
-
-if (isCatalogSave && typeof window.clearCatalogDraft === "function") {
-  window.clearCatalogDraft();
-}
-
-if (CACHEABLE_READS.has(fnName)) {
-  try { localStorage.setItem(cacheKey, JSON.stringify(data.result)); } catch (e) {}
-}
-
-if (typeof successHandler === "function") {
-  successHandler(data.result, userObject);
-}
-
-if (fnName === "setActiveLibrary" && data.result && data.result.success) {
-  setTimeout(() => {
-    window.location.reload();
-  }, 300);
-}
+              localStorage.setItem(
+                "FEUR_ACTIVE_LIBRARY",
+                String(data.result.libraryKey || rawArgs[0] || "ELEMENTARY").toUpperCase()
+              );
+              Object.keys(localStorage).forEach((k) => {
+                if (k.startsWith("feur_cache_")) localStorage.removeItem(k);
+              });
+              data.result.appUrl = window.location.origin + window.location.pathname;
+            }
 
             const isCatalogSave =
               (fnName === "saveBookToInventory" || fnName === "updateLibraryItem") &&
@@ -202,6 +176,12 @@ if (fnName === "setActiveLibrary" && data.result && data.result.success) {
 
             if (isCatalogSave && typeof window.handleCatalogSaveCleanup === "function") {
               setTimeout(() => window.handleCatalogSaveCleanup(), 150);
+            }
+
+            if (fnName === "setActiveLibrary" && data.result && data.result.success) {
+              setTimeout(() => {
+                window.location.reload();
+              }, 300);
             }
           } catch (err) {
             const message = err && err.message ? err.message : String(err);
