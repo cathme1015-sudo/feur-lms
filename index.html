@@ -6067,20 +6067,20 @@ EED-GC0002" oninput="updateCircBatchCounter()"></textarea>
           </div>
 
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
-            <div><label>Section (Col I):</label><select id="section"><option value="Fic">Fiction (Fic)</option><option value="Cir" selected>Circulation (Cir)</option><option value="Ref">Reference (Ref)</option><option value="Fil">Filipiniana (Fil)</option><option value="E">Easy/Everyday Books (E)</option></select></div>
-            <div><label>Class Number (Col J):</label><input type="text" id="classNum" placeholder="e.g. 512.9"></div>
+            <div><label>Section:</label><select id="section"><option value="Fic">Fiction (Fic)</option><option value="Cir" selected>Circulation (Cir)</option><option value="Ref">Reference (Ref)</option><option value="Fil">Filipiniana (Fil)</option><option value="E">Easy/Everyday Books (E)</option></select></div>
+            <div><label>Class Number:</label><input type="text" id="classNum" placeholder="e.g. 512.9"></div>
           </div>
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
-            <div><label>Cutter Number (Col K):</label><input type="text" id="cutter" placeholder="e.g. LIA"></div>
-            <div><label>Volume/Copy (Col G):</label><input type="text" id="volume" placeholder="e.g. c.1, v.1"></div>
-          </div>
+            <div><label>Cutter Number:</label><input type="text" id="cutter" placeholder="e.g. LIA"></div>
+            <div><label>VOLUME:</label><input type="text" id="spineVolume" placeholder="e.g. v.1"></div>
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
-            <div><label>Year (Col L):</label><input type="text" id="year" placeholder="e.g. 2026"></div>
-            <div><label>Accession No. (Col A):</label><input type="text" id="accession" placeholder="e.g. EED-GC0001"></div>
+            <div><label>Year:</label><input type="text" id="year" placeholder="e.g. 2026"></div>
+            <div><label>COPY:</label><input type="text" id="spineCopy" placeholder="e.g. 1"></div>
+            <div><label>Accession No.:</label><input type="text" id="accession" placeholder="e.g. EED-GC0001"></div>
           </div>
           <div class="spine-lexile-edit-field" style="display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:6px; padding:9px; margin:4px 0 2px; border:1px solid var(--border); border-radius:8px; background:var(--surface);">
             <div style="grid-column:1 / -1;">
-              <label for="spineLexileLevel" style="display:block; color:var(--primary); font-size:11px; font-weight:800; margin-bottom:5px;">Lexile Level — editable</label>
+              <label for="spineLexileLevel" style="display:block; color:var(--primary); font-size:11px; font-weight:800; margin-bottom:5px;">Lexile Level</label>
               <input type="text" id="spineLexileLevel" placeholder="Enter or edit Lexile level (e.g. 750L)" autocomplete="off" aria-label="Editable Lexile level for this spine label" style="width:100%; min-height:36px; border:1px solid var(--border); border-radius:7px; padding:8px 10px; background:var(--surface); color:var(--text);">
               <small style="display:block; color:var(--text-muted); font-size:10px; margin-top:4px;">You can type or correct this value manually, even after an accession lookup.</small>
             </div>
@@ -9291,6 +9291,31 @@ function getSpineSettings() {
         } else { showToast(r.message, 'error'); document.getElementById('labelAccQuick').select(); }
       }).withFailureHandler(function(e) { if (b) { b.disabled = false; b.textContent = 'Fetch'; } showToast(e.message, 'error'); }).fetchSpineLabelByAccession(a);
     }
+
+    function formatSpineCopy_(val) {
+  const v = String(val == null ? '' : val).trim();
+  if (!v) return '';
+  if (/^copy\s*:/i.test(v)) return 'copy: ' + v.replace(/^copy\s*:\s*/i, '');
+  if (/^c\.?\s*\d+/i.test(v)) return 'copy: ' + v.replace(/^c\.?\s*/i, '');
+  return 'copy: ' + v;
+}
+
+// Lines ABOVE the horizontal divider line:
+const topLines = [
+  item.section,
+  item.classNum,
+  item.cutter,
+  item.volume,
+  item.year,
+  formatSpineCopy_(item.copy)
+].filter(Boolean);
+
+// Lines BELOW the horizontal divider line:
+const bottomLines = [
+  item.accession,
+  showLexile ? item.lexileLevel : ''
+].filter(Boolean);
+  
     function quickPullByRange() {
       var startEl = document.getElementById('rangeStartAcc'), endEl = document.getElementById('rangeEndAcc');
       var sa = startEl ? startEl.value.trim() : '', ea = endEl ? endEl.value.trim() : '';
