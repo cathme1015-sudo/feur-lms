@@ -299,3 +299,244 @@ window.FEUR_API_URL = "https://script.google.com/macros/s/AKfycbxYtoiXHUnPuLnQGb
     attachCatalogSyncListeners();
   }
 })();
+(function initCatalogDraftAutoSave() {
+  const DRAFT_PREFIX = "FEUR_CATALOG_DRAFT_";
+  const EXCLUDED_IDS = new Set([
+    "bookEditMode",
+    "bookOriginalAccession",
+    "bookTargetLibraryKey",
+    "catalogLibrarySearchInput"
+  ]);
+  let saveTimer = null;
+  let isRestoring = false;
+
+  function getLibraryKey() {
+    const headerSelect = document.getElementById("activeLibrarySelect");
+    if (headerSelect && headerSelect.value) {
+      return String(headerSelect.value).toUpperCase();
+    }
+    const stored = localStorage.getItem("FEUR_ACTIVE_LIBRARY");
+    return stored === "HIGH_SCHOOL" ? "HIGH_SCHOOL" : "ELEMENTARY";
+  }
+
+  function getDraftStorageKey() {
+    return DRAFT_PREFIX + getLibraryKey();
+  }
+
+  function isEditingExistingItem() {
+    const editMode = document.getElementById("bookEditMode");
+    return Boolean(editMode && editMode.value === "1");
+  }
+
+  function updateDraftStatusBadge(text) {
+    const subtitle = document.getElementById("catalogingPageSubtitle");
+    if (!subtitle) return;
+
+    let badge = document.getElementById("catalogDraftStatusBadge");
+    if (!text) {
+      if (badge) badge.remove();
+      return;
+    }
+
+    if (!badge) {
+      badge = document.createElement("span");
+      badge.id = "catalogDraftStatusBadge";
+      badge.style.cssText =
+        "display:inline-flex;align-items:center;gap:8px;margin-left:10px;padding:2px 9px;" +
+        "border-radius:999px;background:#e6f4ed;color:#006633;font-size:11px;font-weight:600;";
+      subtitle.appendChild(badge);
+    }
+
+    badge.innerHTML = "";
+    const label = document.createElement("span");
+    label.textContent = text;
+    badge.appendChild(label);
+
+    const clearBtn = document.createElement("button");
+    clearBtn.type = "button";
+    clearBtn.textContent = "Discard";
+    clearBtn.style.cssText =
+      "border:none;background:none;color:#b91c1c;font-size:11px;font-weight:700;cursor:pointer;padding:0;text-decoration:underline;";
+    clearBtn.onclick = function () {
+      clearCatalogDraft();
+      const form = document.getElementById("newBookForm");
+      if (form) form.reset();
+      if (typeof window.showToast === "function") {
+        window.showToast("Cataloging draft discarded.", "info", 2500);
+      }
+    };
+    badge.appendChild(clearBtn);
+  }
+
+  function saveCatalogDraft() {
+    if (isRestoring || isEditingExistingItem()) return;
+    const form = document.getElementById("newBookForm");
+    if (!form) return;
+
+    const fields = {};
+    let hasUserContent = false;
+
+    const controls = form.querySelectorAll("input, select, textarea");
+    controls.forEach((el) => {
+      if (!el.id || EXCLUDED_IDS.has(el.id)) return;
+      if (el.type === "file" || el.type === "button" || el.type === "submit") return;
+
+      if (el.type === "checkbox" || el.type === "radio") {
+        fields[el.id] = el.checked;
+        if (el.checked) hasUserContent = true;
+      } else {
+        const val = el.value;
+        fields[el.id] = val;
+        if (
+          val &&
+          String(val).trim() !== "" &&
+          el.tagName !== "SELECT" &&
+          el.id !== "bookAccession"
+        ) {
+          hasUserContent = true;
+        }
+      }
+    });
+
+    if (!hasUserContent) {
+      localStorage.removeItem(getDraftStorageKey());
+      updateDraftStatusBadge("");
+      return;
+    }
+
+    try {
+      localStorage.setItem(
+        getDraftStorageKey(),
+        JSON.stringify({ updatedAt: Date.now(), fields })
+      );
+      const timeStr = new Date().toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit"
+      });
+      updateDraftStatusBadge("Draft auto-saved (" + timeStr + ")");
+    } catch (e) {
+      console.warn("Unable to save cataloging draft:", e);
+    }
+  }
+
+  function scheduleSaveDraft() {
+    if (isRestoring || isEditingExistingItem()) return;
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(saveCatalogDraft, 250);
+  }
+
+  function clearCatalogDraft() {
+    clearTimeout(saveTimer);
+    localStorage.removeItem(getDraftStorageKey());
+    updateDraftStatusBadge("");
+  }
+
+  function applyFieldValue(el, value) {
+    if (!el || value === undefined || value === null) return;
+    if (el.type === "checkbox" || el.type === "radio") {
+      el.checked = Boolean(value);
+    } else if (String(value) !== "") {
+      el.value = value;
+    }
+  }
+
+  function restoreCatalogDraft() {
+    if (isEditingExistingItem()) return;
+    const form = document.getElementById("newBookForm");
+    if (!form) return;
+
+    const raw = localStorage.getItem(getDraftStorageKey());
+    if (!raw) {
+      updateDraftStatusBadge("");
+      return;
+    }
+
+    let parsed;
+    try {
+      parsed = JSON.parse(raw);
+    } catch (e) {
+      localStorage.removeItem(getDraftStorageKey());
+      return;
+    }
+
+    const fields = parsed && parsed.fields;
+    if (!fields) return;
+
+    isRestoring = true;
+    try {
+      // Restore primary dropdowns first so dependent fields (sub-genres, prefixes) populate
+      const priorityIds = ["bookCollectionType", "bookType", "bookMainGenre", "bookSection"];
+      priorityIds.forEach((id) => {
+        const el = document.getElementById(id);
+        if (el && fields[id] !== undefined && String(fields[id]) !== "") {
+          el.value = fields[id];
+          el.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+      });
+
+      // Restore all remaining fields after dependent dropdowns update
+      setTimeout(() => {
+        Object.keys(fields).forEach((id) => {
+          if (EXCLUDED_IDS.has(id) || priorityIds.includes(id)) return;
+          const el = document.getElementById(id);
+          applyFieldValue(el, fields[id]);
+        });
+
+        const coverInput = document.getElementById("bookCoverUrl");
+        if (coverInput && coverInput.value) {
+          coverInput.dispatchEvent(new Event("input", { bubbles: true }));
+        }
+
+        isRestoring = false;
+        updateDraftStatusBadge("Draft restored");
+      }, 120);
+    } catch (err) {
+      isRestoring = false;
+    }
+  }
+
+  window.clearCatalogDraft = clearCatalogDraft;
+  window.restoreCatalogDraft = restoreCatalogDraft;
+
+  function bindCatalogDraftEvents() {
+    const form = document.getElementById("newBookForm");
+    if (!form) return;
+
+    form.addEventListener("input", scheduleSaveDraft);
+    form.addEventListener("change", scheduleSaveDraft);
+
+    form.addEventListener("reset", () => {
+      if (!isRestoring) {
+        clearCatalogDraft();
+      }
+    });
+
+    window.addEventListener("beforeunload", () => {
+      if (!isRestoring && !isEditingExistingItem()) {
+        saveCatalogDraft();
+      }
+    });
+
+    const headerSelect = document.getElementById("activeLibrarySelect");
+    if (headerSelect) {
+      headerSelect.addEventListener("change", () => {
+        setTimeout(restoreCatalogDraft, 150);
+      });
+    }
+
+    document.addEventListener("click", (e) => {
+      if (e.target.closest('[onclick*="cataloging"]')) {
+        setTimeout(restoreCatalogDraft, 120);
+      }
+    });
+
+    // Restore after startup library initialization completes
+    setTimeout(restoreCatalogDraft, 600);
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", bindCatalogDraftEvents);
+  } else {
+    bindCatalogDraftEvents();
+  }
+})();
