@@ -1,4 +1,4 @@
-window.FEUR_API_URL = "https://script.google.com/macros/s/AKfycbxYtoiXHUnPuLnQGbfQxbAUfnXXB-JY4TIsR6JG7QRm_MCF77_0TA84PeiPwlenGaW44Q/exec";
+window.FEUR_API_URL = "https://script.google.com/macros/s/AKfycbxYtoiXHUnPuLnQGbfQxbAUfnXXB-JY4TlsR6JG7QRm_MCF77_0TA84PeiPwlenGaW44Q/exec";
 
 (function () {
   const CACHEABLE_READS = new Set([
@@ -146,9 +146,17 @@ window.FEUR_API_URL = "https://script.google.com/macros/s/AKfycbxYtoiXHUnPuLnQGb
               throw new Error((data && data.error) || "Server error");
             }
 
-            // Override appUrl so library selection stays on GitHub Pages
-            if (fnName === "setActiveLibrary" && data.result) {
+            if (fnName === "setActiveLibrary" && data.result && data.result.appUrl) {
               data.result.appUrl = window.location.origin + window.location.pathname;
+            }
+
+            const isCatalogSave =
+              (fnName === "saveBookToInventory" || fnName === "updateLibraryItem") &&
+              data.result &&
+              data.result.success;
+
+            if (isCatalogSave && typeof window.clearCatalogDraft === "function") {
+              window.clearCatalogDraft();
             }
 
             if (CACHEABLE_READS.has(fnName)) {
@@ -157,6 +165,10 @@ window.FEUR_API_URL = "https://script.google.com/macros/s/AKfycbxYtoiXHUnPuLnQGb
 
             if (typeof successHandler === "function") {
               successHandler(data.result, userObject);
+            }
+
+            if (isCatalogSave && typeof window.handleCatalogSaveCleanup === "function") {
+              setTimeout(() => window.handleCatalogSaveCleanup(), 150);
             }
           } catch (err) {
             const message = err && err.message ? err.message : String(err);
@@ -187,6 +199,7 @@ window.FEUR_API_URL = "https://script.google.com/macros/s/AKfycbxYtoiXHUnPuLnQGb
   window.google.script = window.google.script || {};
   window.google.script.run = createRunner(null, null, null);
 })();
+
 (function initCatalogLibraryAutoSync() {
   function getCurrentLibraryKey() {
     const headerSelect = document.getElementById("activeLibrarySelect");
@@ -254,6 +267,7 @@ window.FEUR_API_URL = "https://script.google.com/macros/s/AKfycbxYtoiXHUnPuLnQGb
   }
 
   window.syncCatalogLibraryDropdown = syncCatalogLibraryDropdown;
+  window.findCatalogLibrarySelect = findCatalogLibrarySelect;
 
   function attachCatalogSyncListeners() {
     syncCatalogLibraryDropdown(false);
@@ -299,6 +313,7 @@ window.FEUR_API_URL = "https://script.google.com/macros/s/AKfycbxYtoiXHUnPuLnQGb
     attachCatalogSyncListeners();
   }
 })();
+
 (function initCatalogDraftAutoSave() {
   const DRAFT_PREFIX = "FEUR_CATALOG_DRAFT_";
   const EXCLUDED_IDS = new Set([
@@ -358,9 +373,7 @@ window.FEUR_API_URL = "https://script.google.com/macros/s/AKfycbxYtoiXHUnPuLnQGb
     clearBtn.style.cssText =
       "border:none;background:none;color:#b91c1c;font-size:11px;font-weight:700;cursor:pointer;padding:0;text-decoration:underline;";
     clearBtn.onclick = function () {
-      clearCatalogDraft();
-      const form = document.getElementById("newBookForm");
-      if (form) form.reset();
+      handleCatalogSaveCleanup();
       if (typeof window.showToast === "function") {
         window.showToast("Cataloging draft discarded.", "info", 2500);
       }
@@ -431,6 +444,65 @@ window.FEUR_API_URL = "https://script.google.com/macros/s/AKfycbxYtoiXHUnPuLnQGb
     updateDraftStatusBadge("");
   }
 
+  function handleCatalogSaveCleanup() {
+    isRestoring = true;
+    try {
+      clearCatalogDraft();
+
+      const editMode = document.getElementById("bookEditMode");
+      const origAcc = document.getElementById("bookOriginalAccession");
+      const targetLib = document.getElementById("bookTargetLibraryKey");
+      const editBanner = document.getElementById("catalogEditingBanner");
+
+      if (editMode) editMode.value = "0";
+      if (origAcc) origAcc.value = "";
+      if (targetLib) targetLib.value = "";
+      if (editBanner) editBanner.classList.remove("active");
+
+      const form = document.getElementById("newBookForm");
+      const librarySelect =
+        typeof window.findCatalogLibrarySelect === "function"
+          ? window.findCatalogLibrarySelect()
+          : null;
+
+      if (form) {
+        const controls = form.querySelectorAll("input, select, textarea");
+        controls.forEach((el) => {
+          if (el.type === "button" || el.type === "submit") return;
+          if (el.id === "bookAccession") return;
+          if (el.id === "bookCollectionType") return;
+          if (librarySelect && el === librarySelect) return;
+
+          if (el.type === "checkbox" || el.type === "radio") {
+            el.checked = false;
+          } else if (el.tagName === "SELECT") {
+            el.selectedIndex = 0;
+          } else {
+            el.value = "";
+          }
+        });
+      }
+
+      const coverInput = document.getElementById("bookCoverUrl");
+      if (coverInput) {
+        coverInput.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+
+      if (typeof window.syncCatalogLibraryDropdown === "function") {
+        window.syncCatalogLibraryDropdown(true);
+      }
+
+      if (typeof window.handleCollectionChange === "function") {
+        window.handleCollectionChange();
+      }
+    } finally {
+      setTimeout(() => {
+        isRestoring = false;
+        clearCatalogDraft();
+      }, 150);
+    }
+  }
+
   function applyFieldValue(el, value) {
     if (!el || value === undefined || value === null) return;
     if (el.type === "checkbox" || el.type === "radio") {
@@ -464,7 +536,6 @@ window.FEUR_API_URL = "https://script.google.com/macros/s/AKfycbxYtoiXHUnPuLnQGb
 
     isRestoring = true;
     try {
-      // Restore primary dropdowns first so dependent fields (sub-genres, prefixes) populate
       const priorityIds = ["bookCollectionType", "bookType", "bookMainGenre", "bookSection"];
       priorityIds.forEach((id) => {
         const el = document.getElementById(id);
@@ -474,7 +545,6 @@ window.FEUR_API_URL = "https://script.google.com/macros/s/AKfycbxYtoiXHUnPuLnQGb
         }
       });
 
-      // Restore all remaining fields after dependent dropdowns update
       setTimeout(() => {
         Object.keys(fields).forEach((id) => {
           if (EXCLUDED_IDS.has(id) || priorityIds.includes(id)) return;
@@ -497,6 +567,7 @@ window.FEUR_API_URL = "https://script.google.com/macros/s/AKfycbxYtoiXHUnPuLnQGb
 
   window.clearCatalogDraft = clearCatalogDraft;
   window.restoreCatalogDraft = restoreCatalogDraft;
+  window.handleCatalogSaveCleanup = handleCatalogSaveCleanup;
 
   function bindCatalogDraftEvents() {
     const form = document.getElementById("newBookForm");
@@ -530,7 +601,6 @@ window.FEUR_API_URL = "https://script.google.com/macros/s/AKfycbxYtoiXHUnPuLnQGb
       }
     });
 
-    // Restore after startup library initialization completes
     setTimeout(restoreCatalogDraft, 600);
   }
 
