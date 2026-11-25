@@ -6067,19 +6067,17 @@ EED-GC0002" oninput="updateCircBatchCounter()"></textarea>
           </div>
 
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
             <div><label>Section:</label><select id="section"><option value="Fic">Fiction (Fic)</option><option value="Cir" selected>Circulation (Cir)</option><option value="Ref">Reference (Ref)</option><option value="Fil">Filipiniana (Fil)</option><option value="E">Easy/Everyday Books (E)</option></select></div>
             <div><label>Class Number:</label><input type="text" id="classNum" placeholder="e.g. 512.9"></div>
           </div>
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
             <div><label>Cutter Number:</label><input type="text" id="cutter" placeholder="e.g. LIA"></div>
-            <div><label>Volume (Col AJ):</label><input type="text" id="spineVolume" placeholder="e.g. v.1"></div>
-          </div>
+            <div><label>VOLUME:</label><input type="text" id="spineVolume" placeholder="e.g. v.1"></div>
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
             <div><label>Year:</label><input type="text" id="year" placeholder="e.g. 2026"></div>
-            <div><label>Copy (Col G):</label><input type="text" id="spineCopy" placeholder="e.g. 1"></div>
+            <div><label>COPY:</label><input type="text" id="spineCopy" placeholder="e.g. 1"></div>
+            <div><label>Accession No.:</label><input type="text" id="accession" placeholder="e.g. EED-GC0001"></div>
           </div>
-          <div><label>Accession No.:</label><input type="text" id="accession" placeholder="e.g. EED-GC0001"></div>
           <div class="spine-lexile-edit-field" style="display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:6px; padding:9px; margin:4px 0 2px; border:1px solid var(--border); border-radius:8px; background:var(--surface);">
             <div style="grid-column:1 / -1;">
               <label for="spineLexileLevel" style="display:block; color:var(--primary); font-size:11px; font-weight:800; margin-bottom:5px;">Lexile Level</label>
@@ -8659,20 +8657,867 @@ volume: document.getElementById('bookVolume').value.trim(),
     }
 
     function sendToSpineMaker() {
-      var a = document.getElementById('bookAccession').value.trim();
-      if (!a) return showToast('Need Accession', 'error');
-      document.getElementById('section').value = document.getElementById('bookSection').value;
-      document.getElementById('classNum').value = document.getElementById('bookClassNum').value;
-      document.getElementById('cutter').value = document.getElementById('bookCutter').value;
-      document.getElementById('spineVolume').value = document.getElementById('bookVolume').value;
-      document.getElementById('year').value = document.getElementById('bookYear').value;
-      document.getElementById('spineCopy').value = document.getElementById('bookCopyNumber').value;
-      document.getElementById('spineLexileLevel').value = document.getElementById('bookLexileLevel').value;
-      document.getElementById('accession').value = a;
-      switchTab('labels');
-      updateSpineLivePreview();
-      showToast('Transferred to Spine Labels', 'info');
+      var a = document.getElementById('bookAccession').value.trim(); if (!a) return showToast('Need Accession', 'error');
+      var fields = ['section', 'classNum', 'cutter', 'volume', 'year'];
+      for (var i = 0; i < fields.length; i++) document.getElementById(fields[i]).value = document.getElementById('book' + fields[i].charAt(0).toUpperCase() + fields[i].slice(1)).value;
+      document.getElementById('accession').value = a; switchTab('labels'); showToast('Transferred to queue', 'info');
     }
+
+    var catalogBarcodePreviewState = {
+      accession: '',
+      slot: 0,
+      cols: 1,
+      rows: 1,
+      slotsPerPage: 1,
+      pageWidth: 210,
+      pageHeight: 297
+    };
+
+    function printCatalogBarcode() {
+      var a = document.getElementById('bookAccession');
+      var accession = a ? a.value.trim() : '';
+      if (!accession) {
+        showToast('Generate or enter an Accession No. first.', 'error', 2500);
+        if (a) a.focus();
+        return;
+      }
+
+      // Seed the Barcode Maker with the catalog accession, but do not navigate away.
+      var values = document.getElementById('bcValues');
+      if (values) values.value = accession;
+      var start = document.getElementById('bcStartIndex');
+      if (start) start.value = '0';
+      try { updateBarcodeMaker(true); } catch (ignore) {}
+      openCatalogBarcodePrintPreview(accession);
+    }
+
+    function getCatalogBarcodePageDimensions() {
+      var size = ((document.getElementById('bcPageSize') || {}).value || 'letter').toLowerCase();
+      if (size === 'a4') return {width:210, height:297, name:'A4'};
+      if (size === 'legal') return {width:216, height:356, name:'Legal'};
+      return {width:216, height:279, name:'US Letter'};
+    }
+
+    function getCatalogBarcodePreviewSettings() {
+      function gv(id, def) { var el=document.getElementById(id); return el ? el.value : def; }
+      function gc(id, def) { var el=document.getElementById(id); return el ? !!el.checked : def; }
+      var page=getCatalogBarcodePageDimensions();
+      return {
+        page:page,
+        width:Math.max(10,parseFloat(gv('bcWidth',45))||45),
+        height:Math.max(10,parseFloat(gv('bcHeight',20))||20),
+        mt:Math.max(0,parseFloat(gv('bcMarginTop',5))||0),
+        mr:Math.max(0,parseFloat(gv('bcMarginRight',5))||0),
+        mb:Math.max(0,parseFloat(gv('bcMarginBottom',5))||0),
+        ml:Math.max(0,parseFloat(gv('bcMarginLeft',5))||0),
+        gh:Math.max(0,parseFloat(gv('bcGapH',2))||0),
+        gv:Math.max(0,parseFloat(gv('bcGapV',2))||0),
+        pad:Math.max(0,parseFloat(gv('bcPadding',1))||0),
+        barcodeHeight:Math.max(8,parseInt(gv('bcBarcodeHeight',26),10)||26),
+        barcodeScale:Math.max(.5,parseFloat(gv('bcBarcodeScale',1.2))||1.2),
+        showBarcode:true,
+        showAccession:gc('bcShowAccession',true),
+        codeFont:gv('bcCodeFontFamily','Arial, sans-serif'),
+        codeSize:Math.max(5,parseInt(gv('bcCodeTextSize',9),10)||9),
+        codeBold:gc('bcCodeTextBold',false),
+        codeItal:gc('bcCodeTextItalic',false),
+        header:gv('bcHeaderText','').trim(),
+        footer:gv('bcFooterText','').trim(),
+        font:gv('bcFontFamily',"'Inter', sans-serif"),
+        textSize:Math.max(5,parseInt(gv('bcTextSize',7),10)||7),
+        textBold:gc('bcTextBold',true),
+        textItal:gc('bcTextItalic',false),
+        textGap:Math.max(0,parseInt(gv('bcTextGap',2),10)||0),
+        order:gv('bcLayoutOrder','H-B-A-F'),
+        vAlign:gv('bcAlignVertical','center'),
+        tAlign:gv('bcTextAlign','center')
+      };
+    }
+
+    function populateCatalogBarcodeSlotSelector(total, selected) {
+      var sel=document.getElementById('catalogPreviewSlot');
+      if(!sel)return;
+      sel.innerHTML='';
+      for(var i=0;i<total;i++){
+        var opt=document.createElement('option');
+        opt.value=String(i);
+        opt.textContent='Slot '+(i+1);
+        sel.appendChild(opt);
+      }
+      sel.value=String(Math.max(0,Math.min(total-1,selected||0)));
+    }
+
+    function selectCatalogBarcodeSlot(slot) {
+      var n=parseInt(slot,10);
+      if(isNaN(n)) n=0;
+      n=Math.max(0,Math.min(catalogBarcodePreviewState.slotsPerPage-1,n));
+      catalogBarcodePreviewState.slot=n;
+      var lab=document.getElementById('catalogPreviewSlotLabel');
+      if(lab)lab.textContent=String(n+1);
+      updateCatalogBarcodePrintPreview(false);
+    }
+
+    /* Self-contained Code 128-B renderer. Uses ordinary HTML bars so the barcode is visible even when SVG/JsBarcode is unavailable. */
+    var CATALOG_CODE128B_PATTERNS = [
+      '212222','222122','222221','121223','121322','131222','122213','122312','132212','221213','221312','231212','112232','122132','122231','113222','123122','123221','223211','221132','221231','213212','223112','312131','311222','321122','321221','312212','322112','322211','212123','212321','232121','111323','131123','131321','112313','132113','132311','211313','231113','231311','112133','112331','132131','113123','113321','133121','313121','211331','231131','213113','213311','213131','311123','311321','331121','312113','312311','332111','314111','221411','431111','111224','111422','121124','121421','141122','141221','112214','112412','122114','122411','142112','142211','241211','221114','413111','241112','134111','111242','121142','121241','114212','124112','124211','411212','421112','421211','212141','214121','412121','111143','111341','131141','114113','114311','411113','411311','113141','114131','311141','411131','211412','211214','211232','2331112'
+    ];
+    function getCatalogCode128Pattern(text) {
+      text = String(text == null ? '' : text);
+      var pattern = CATALOG_CODE128B_PATTERNS[104];
+      var checksum = 104, weight = 1;
+      for (var i=0;i<text.length;i++) {
+        var code=text.charCodeAt(i);
+        if (code < 32 || code > 126) code=46;
+        var sym=code-32;
+        pattern += CATALOG_CODE128B_PATTERNS[sym];
+        checksum=(checksum + sym*weight)%103;
+        weight++;
+      }
+      pattern += CATALOG_CODE128B_PATTERNS[checksum] + CATALOG_CODE128B_PATTERNS[106];
+      return pattern;
+    }
+    function renderCatalogBarcodeBars(holder, text, moduleWidth, height) {
+      /* Valid Code 128-B, print/scanner-safe HTML bars with mandatory quiet zones. */
+      if (!holder) return false;
+      text = String(text == null ? '' : text).trim();
+      if (!text) return false;
+
+      var pattern = getCatalogCode128Pattern(text);
+      var mw = Math.max(1, Math.round(Number(moduleWidth) || 1));
+      var h = Math.max(30, Math.round(Number(height) || 38));
+      var quietModules = 10;
+      var totalModules = quietModules * 2;
+      for (var i=0;i<pattern.length;i++) totalModules += parseInt(pattern.charAt(i),10);
+
+      holder.innerHTML = '';
+      holder.style.cssText = 'display:flex !important;align-items:center !important;justify-content:center !important;width:100% !important;max-width:100% !important;height:'+h+'px !important;min-height:'+h+'px !important;overflow:visible !important;line-height:0 !important;box-sizing:border-box !important;position:relative !important;visibility:visible !important;opacity:1 !important;';
+
+      var available = Math.max(80, holder.clientWidth || 180);
+      var desiredWidth = totalModules * mw;
+      var actualMw = mw;
+      if (desiredWidth > available) actualMw = Math.max(1, Math.floor(available / totalModules));
+      var actualWidth = totalModules * actualMw;
+
+      var wrap = document.createElement('div');
+      wrap.setAttribute('role','img');
+      wrap.setAttribute('aria-label','Code 128 barcode '+text);
+      wrap.style.cssText = 'display:flex !important;flex:0 0 '+actualWidth+'px !important;width:'+actualWidth+'px !important;max-width:100% !important;height:'+h+'px !important;min-height:'+h+'px !important;box-sizing:content-box !important;background:#fff !important;overflow:hidden !important;visibility:visible !important;opacity:1 !important;';
+      holder.appendChild(wrap);
+
+      /* Quiet zone before the symbol. */
+      var q1=document.createElement('span');
+      q1.style.cssText='display:block !important;flex:0 0 '+(quietModules*actualMw)+'px !important;width:'+(quietModules*actualMw)+'px !important;height:'+h+'px !important;background:#fff !important;';
+      wrap.appendChild(q1);
+
+      var black=true;
+      for (var j=0;j<pattern.length;j++) {
+        var run=parseInt(pattern.charAt(j),10)*actualMw;
+        var bar=document.createElement('span');
+        bar.setAttribute('aria-hidden','true');
+        /* Use a real black border for bars: Chromium/Edge print preview may omit background fills. */
+        bar.style.cssText='display:block !important;flex:0 0 '+run+'px !important;width:'+run+'px !important;height:'+h+'px !important;min-height:'+h+'px !important;box-sizing:border-box !important;background:#fff !important;border:0 !important;'+(black?'border-left:'+run+'px solid #000 !important;':'')+'visibility:visible !important;opacity:1 !important;-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;';
+        wrap.appendChild(bar);
+        black=!black;
+      }
+
+      /* Quiet zone after the symbol. */
+      var q2=document.createElement('span');
+      q2.style.cssText='display:block !important;flex:0 0 '+(quietModules*actualMw)+'px !important;width:'+(quietModules*actualMw)+'px !important;height:'+h+'px !important;background:#fff !important;';
+      wrap.appendChild(q2);
+      return true;
+    }
+    function renderCatalogBarcodeBackground(holder, text, moduleWidth, height) {
+      /* Kept for compatibility with the existing Barcode Maker code. Despite the
+         old function name, this now uses print-safe HTML bars rather than a
+         background image. */
+      return renderCatalogBarcodeBars(holder, text, moduleWidth, height);
+    }
+    function renderCatalogBarcodeSvg(svg, value, scale, height) {
+      /* Keep this function name for compatibility with the rest of the app, but render using HTML bars. */
+      if (!svg) return false;
+      var parent = svg.parentNode;
+      if (parent) {
+        parent.removeChild(svg);
+        return renderCatalogBarcodeBars(parent, value, scale, height);
+      }
+      return false;
+    }
+    function renderCatalogBarcodeInto(holder, value, scale, height) {
+      return renderCatalogBarcodeBars(holder, value, scale, height);
+    }
+
+    function buildCatalogBarcodeLabelContent(settings, value, slotEl) {
+      var content=document.createElement('div');
+      content.className='catalog-barcode-preview-label-content';
+      var align=settings.tAlign==='left'?'flex-start':(settings.tAlign==='right'?'flex-end':'center');
+      content.style.cssText='display:flex;flex-direction:column;align-items:'+align+';justify-content:'+(settings.vAlign||'center')+';gap:'+settings.textGap+'px;text-align:'+settings.tAlign+';font-family:'+settings.font+';font-size:'+settings.textSize+'px;font-weight:'+(settings.textBold?'700':'400')+';font-style:'+(settings.textItal?'italic':'normal')+';padding:'+settings.pad+'mm;';
+      var orderMap={
+        'H-B-A-F':['hdr','barcode','acc','ftr'],
+        'H-A-B-F':['hdr','acc','barcode','ftr'],
+        'A-B-F':['acc','barcode','ftr'],
+        'B-A':['barcode','acc'],
+        'A-B':['acc','barcode']
+      };
+      var order=orderMap[settings.order]||orderMap['H-B-A-F'];
+      for(var i=0;i<order.length;i++){
+        var type=order[i];
+        if(type==='hdr' && settings.header){
+          var hd=document.createElement('div'); hd.textContent=settings.header; hd.style.cssText='width:100%;line-height:1.1;'; content.appendChild(hd);
+        }
+        if(type==='barcode' && settings.showBarcode){
+          var holder=document.createElement('div');
+          holder.style.cssText='width:100%;display:flex;align-items:center;justify-content:'+align+';line-height:0;overflow:hidden;';
+          content.appendChild(holder);
+          renderCatalogBarcodeInto(holder,value,settings.barcodeScale,settings.barcodeHeight);
+        }
+        if(type==='acc' && settings.showAccession){
+          var cd=document.createElement('div');
+          cd.textContent=value;
+          cd.style.cssText='width:100%;font-family:'+settings.codeFont+';font-size:'+settings.codeSize+'px;font-weight:'+(settings.codeBold?'700':'400')+';font-style:'+(settings.codeItal?'italic':'normal')+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:'+settings.tAlign+';line-height:1.1;';
+          content.appendChild(cd);
+        }
+        if(type==='ftr' && settings.footer){
+          var ft=document.createElement('div'); ft.textContent=settings.footer; ft.style.cssText='width:100%;line-height:1.1;'; content.appendChild(ft);
+        }
+      }
+      slotEl.appendChild(content);
+    }
+
+    function openCatalogBarcodePrintPreview(accession) {
+      var modal=document.getElementById('catalogBarcodePreviewModal');
+      if(!modal){
+        showToast('Barcode preview is not available in this Index.html.', 'error', 3500);
+        return;
+      }
+      if(modal.parentElement!==document.body)document.body.appendChild(modal);
+
+      var input=document.getElementById('catalogPreviewBarcodeValue');
+      if(input)input.value=accession||'';
+
+      var settings=getCatalogBarcodePreviewSettings();
+      var usableW=settings.page.width-settings.ml-settings.mr;
+      var usableH=settings.page.height-settings.mt-settings.mb;
+      var cols=Math.floor((usableW+settings.gh)/(settings.width+settings.gh));
+      var rows=Math.floor((usableH+settings.gv)/(settings.height+settings.gv));
+      cols=Math.max(1,cols); rows=Math.max(1,rows);
+
+      catalogBarcodePreviewState.accession=accession||'';
+      catalogBarcodePreviewState.cols=cols;
+      catalogBarcodePreviewState.rows=rows;
+      catalogBarcodePreviewState.slotsPerPage=cols*rows;
+      catalogBarcodePreviewState.pageWidth=settings.page.width;
+      catalogBarcodePreviewState.pageHeight=settings.page.height;
+      catalogBarcodePreviewState.slot=Math.max(0,Math.min(catalogBarcodePreviewState.slotsPerPage-1,parseInt((document.getElementById('bcStartIndex')||{}).value,10)||0));
+
+      populateCatalogBarcodeSlotSelector(catalogBarcodePreviewState.slotsPerPage,catalogBarcodePreviewState.slot);
+      var lab=document.getElementById('catalogPreviewSlotLabel');
+      if(lab)lab.textContent=String(catalogBarcodePreviewState.slot+1);
+      updateCatalogBarcodePrintPreview(true);
+
+      var meta=document.getElementById('catalogBarcodePreviewMeta');
+      if(meta)meta.textContent='Edit the barcode, then click a slot or choose a slot number before printing.';
+      modal.style.display='flex';
+      modal.style.position='fixed';
+      modal.style.inset='0';
+      modal.style.zIndex='2147483647';
+      modal.setAttribute('aria-hidden','false');
+      modal.classList.add('open');
+    }
+
+    function updateCatalogBarcodePrintPreview(resetSlot) {
+      var body=document.getElementById('catalogBarcodePreviewBody');
+      if(!body)return;
+      var input=document.getElementById('catalogPreviewBarcodeValue');
+      var value=(input ? input.value : catalogBarcodePreviewState.accession).trim();
+      if(!value)value=catalogBarcodePreviewState.accession||'';
+      catalogBarcodePreviewState.accession=value;
+
+      var settings=getCatalogBarcodePreviewSettings();
+      var usableW=settings.page.width-settings.ml-settings.mr;
+      var usableH=settings.page.height-settings.mt-settings.mb;
+      var cols=Math.floor((usableW+settings.gh)/(settings.width+settings.gh));
+      var rows=Math.floor((usableH+settings.gv)/(settings.height+settings.gv));
+      cols=Math.max(1,cols); rows=Math.max(1,rows);
+      var total=cols*rows;
+
+      if(resetSlot===true){
+        catalogBarcodePreviewState.slot=Math.max(0,Math.min(total-1,catalogBarcodePreviewState.slot||0));
+        populateCatalogBarcodeSlotSelector(total,catalogBarcodePreviewState.slot);
+      }else{
+        catalogBarcodePreviewState.slot=Math.max(0,Math.min(total-1,catalogBarcodePreviewState.slot||0));
+      }
+      catalogBarcodePreviewState.cols=cols;
+      catalogBarcodePreviewState.rows=rows;
+      catalogBarcodePreviewState.slotsPerPage=total;
+
+      var sel=document.getElementById('catalogPreviewSlot');
+      if(sel)sel.value=String(catalogBarcodePreviewState.slot);
+      var slotLabel=document.getElementById('catalogPreviewSlotLabel');
+      if(slotLabel)slotLabel.textContent=String(catalogBarcodePreviewState.slot+1);
+
+      body.innerHTML='';
+      var sheet=document.createElement('div');
+      sheet.className='catalog-barcode-preview-sheet';
+      sheet.style.cssText='width:'+settings.page.width+'mm;height:'+settings.page.height+'mm;background:#fff;box-sizing:border-box;padding:'+settings.mt+'mm '+settings.mr+'mm '+settings.mb+'mm '+settings.ml+'mm;display:grid;grid-template-columns:repeat('+cols+','+settings.width+'mm);grid-template-rows:repeat('+rows+','+settings.height+'mm);column-gap:'+settings.gh+'mm;row-gap:'+settings.gv+'mm;box-shadow:0 8px 30px rgba(15,23,42,.16);';
+
+      for(var i=0;i<total;i++){
+        var slot=document.createElement('div');
+        slot.className='catalog-barcode-preview-slot blank'+(i===catalogBarcodePreviewState.slot?' selected':'');
+        slot.style.width=settings.width+'mm';
+        slot.style.height=settings.height+'mm';
+        slot.title='Click to print in slot '+(i+1);
+        slot.onclick=(function(index){return function(){selectCatalogBarcodeSlot(index);};})(i);
+
+        var num=document.createElement('span');
+        num.className='catalog-barcode-preview-slot-number';
+        num.textContent=String(i+1);
+        slot.appendChild(num);
+
+        if(i===catalogBarcodePreviewState.slot){
+          slot.classList.remove('blank');
+          slot.style.border='2px solid #08744f';
+          buildCatalogBarcodeLabelContent(settings,value,slot);
+        }
+        sheet.appendChild(slot);
+      }
+      body.appendChild(sheet);
+
+      var meta=document.getElementById('catalogBarcodePreviewMeta');
+      if(meta)meta.textContent='Barcode: '+(value||'—')+' • Selected slot: '+(catalogBarcodePreviewState.slot+1)+' of '+total+' • '+settings.page.name;
+    }
+
+    function closeCatalogBarcodePrintPreview() {
+      var modal=document.getElementById('catalogBarcodePreviewModal');
+      if(modal){
+        modal.classList.remove('open');
+        modal.style.display='none';
+        modal.setAttribute('aria-hidden','true');
+      }
+    }
+
+    function printCatalogBarcodeFromPreview() {
+      var input=document.getElementById('catalogPreviewBarcodeValue');
+      var value=input ? input.value.trim() : catalogBarcodePreviewState.accession;
+      if(!value){
+        showToast('Enter a barcode value first.', 'error', 2500);
+        if(input)input.focus();
+        return;
+      }
+
+      catalogBarcodePreviewState.accession=value;
+      var start=document.getElementById('bcStartIndex');
+      if(start)start.value=String(catalogBarcodePreviewState.slot);
+      var values=document.getElementById('bcValues');
+      if(values)values.value=value;
+      try{updateBarcodeMaker(true);}catch(e){}
+
+      /* Build the exact sheet that is visible in the catalog preview. */
+      updateCatalogBarcodePrintPreview(false);
+      var source=document.querySelector('#catalogBarcodePreviewBody .catalog-barcode-preview-sheet');
+      if(!source){
+        showToast('Unable to create the barcode print sheet.', 'error', 3000);
+        return;
+      }
+
+      /*
+       * Do NOT use a popup or iframe.  Put a dedicated print sheet at the
+       * top level of the current document and temporarily hide the app.
+       * This avoids Chromium/Edge printing a blank iframe document.
+       */
+      var old=document.getElementById('catalogDirectPrintSheet');
+      if(old)old.remove();
+
+      var printSheet=source.cloneNode(true);
+      printSheet.id='catalogDirectPrintSheet';
+      printSheet.removeAttribute('onclick');
+      printSheet.style.cssText=source.style.cssText+
+        ';position:fixed!important;left:0!important;top:0!important;margin:0!important;'+
+        'box-shadow:none!important;background:#fff!important;z-index:2147483647!important;'+
+        'visibility:visible!important;display:grid!important;';
+
+      var slots=printSheet.querySelectorAll('.catalog-barcode-preview-slot');
+      for(var i=0;i<slots.length;i++){
+        slots[i].onclick=null;
+        slots[i].style.cursor='default';
+        slots[i].classList.remove('selected');
+        slots[i].style.border='none';
+        slots[i].style.boxShadow='none';
+        var n=slots[i].querySelector('.catalog-barcode-preview-slot-number');
+        if(n)n.style.display='none';
+      }
+      var selected=slots[catalogBarcodePreviewState.slot];
+      if(selected){
+        selected.style.border='none';
+        selected.style.boxShadow='none';
+      }
+
+      document.body.appendChild(printSheet);
+      document.body.classList.add('catalog-direct-barcode-printing');
+
+      var cleaned=false;
+      function cleanup(){
+        if(cleaned)return;
+        cleaned=true;
+        document.body.classList.remove('catalog-direct-barcode-printing');
+        var el=document.getElementById('catalogDirectPrintSheet');
+        if(el)el.remove();
+        window.removeEventListener('afterprint',cleanup);
+      }
+      window.addEventListener('afterprint',cleanup);
+
+      /* Give the browser paint cycles so the print-safe HTML bars are fully laid out. */
+      requestAnimationFrame(function(){
+        requestAnimationFrame(function(){
+          try{
+            window.focus();
+            window.print();
+          }catch(e){
+            cleanup();
+            showToast('Unable to open the browser print dialog.', 'error', 3000);
+          }
+        });
+      });
+    }
+
+    // SPINE LABELS LOGIC
+    var lInputs = ['section','classNum','cutter','volume','year','spineLexileLevel','accession'];
+    for (var i = 0; i < lInputs.length; i++) { var el = document.getElementById(lInputs[i]); if (el) { el.addEventListener('keydown', function(e) { if (e.key === 'Enter') addLabel(); }); el.addEventListener('input', function() { saveProgress(); updateSpineLivePreview(); }); } }
+    var catLInp = document.getElementById('catLookupIsbn'); if (catLInp) catLInp.addEventListener('keydown', function(e) { if (e.key === 'Enter') { e.preventDefault(); handleCatalogLookup(); } });
+    var lAccQ = document.getElementById('labelAccQuick'); if (lAccQ) lAccQ.addEventListener('keydown', function(e) { if (e.key === 'Enter') { e.preventDefault(); quickPullByAccession(); } });
+    var spineAccessionInput = document.getElementById('accession');
+    if (spineAccessionInput) {
+      spineAccessionInput.addEventListener('change', function() {
+        var enteredAccession = this.value.trim();
+        var lexileField = document.getElementById('spineLexileLevel');
+        if (lexileField) lexileField.value = '';
+        if (enteredAccession) {
+          autoFetchSpineLexileForAccession(enteredAccession, function(level) {
+            if (level) showToast('Lexile level found: ' + level, 'success', 1800);
+          });
+        }
+      });
+    }
+    var rEndA = document.getElementById('rangeEndAcc'); if (rEndA) rEndA.addEventListener('keydown', function(e) { if (e.key === 'Enter') { e.preventDefault(); quickPullByRange(); } });
+
+    var _isRestoringProgress = false;
+    var _spineDriveSaveTimer = null;
+    var _barcodeDriveSaveTimer = null;
+
+    function getActiveLibraryKeyForStorage() {
+      var sel = document.getElementById('activeLibrarySelect');
+      return (sel && sel.value) ? sel.value : 'ELEMENTARY';
+    }
+
+    function getSK() {
+      return 'feu_spine_labels_' + getActiveLibraryKeyForStorage() + '_' + (currentStaff ? currentStaff.id : 'guest');
+    }
+
+    function applySpineProgressData(data) {
+      _isRestoringProgress = true;
+      try {
+        stSl = 0; lblQ = []; selInd.clear();
+        if (data) {
+          stSl = Number.isFinite(Number(data.startSlotIndex)) ? Math.max(0, Number(data.startSlotIndex)) : 0;
+          lblQ = Array.isArray(data.labelQueue) ? data.labelQueue : [];
+          if (document.getElementById('guideToggle')) document.getElementById('guideToggle').checked = Boolean(data.guideChecked);
+          toggleGuides(false);
+          if (data.draft) {
+            var ids = ['section','classNum','cutter','volume','year','spineLexileLevel','accession'];
+            var vals = [data.draft.sec,data.draft.cls,data.draft.cut,data.draft.vol,data.draft.yr,data.draft.lexile,data.draft.acc];
+            for (var i = 0; i < ids.length; i++) {
+              var field = document.getElementById(ids[i]);
+              if (field) field.value = vals[i] == null ? '' : vals[i];
+            }
+          }
+          if (data.layout) loadSpineLabelStyle(data.layout);
+        }
+        updateUI();
+        updateSpineLivePreview();
+      } finally {
+        _isRestoringProgress = false;
+      }
+    }
+function getSpineSettings() {
+      function gv(id, def) { var el = document.getElementById(id); return el ? el.value : def; }
+      function gc(id, def) { var el = document.getElementById(id); return el ? !!el.checked : def; }
+      return {
+        order: gv('spineLayoutOrder', 'stack-acc'),
+        vAlign: gv('spineVerticalAlign', 'space-between'),
+        tAlign: gv('spineTextAlign', 'center'),
+        lineHeight: parseFloat(gv('spineLineHeight', 1.5)) || 1.5,
+        padding: parseFloat(gv('spinePadding', 1.5)) || 1.5,
+        gap: parseFloat(gv('spineElementGap', 4)) || 0,
+        font: gv('spineFontFamily', "'Inter', sans-serif"),
+        stackSize: parseFloat(gv('spineStackSize', 13)) || 13,
+        boldStack: gc('spineBoldStack', true),
+        accFont: gv('spineAccFontFamily', "'Inter', sans-serif"),
+        accSize: parseFloat(gv('spineAccSize', 10)) || 10,
+        accAlign: gv('spineAccAlign', 'center'),
+        accVAlign: gv('spineAccVAlign', 'center'),
+        dividerWidth: parseFloat(gv('spineDividerWidth', 2)) || 0,
+        accOffsetX: parseFloat(gv('spineAccOffsetX', 0)) || 0,
+        accOffsetY: parseFloat(gv('spineAccOffsetY', 0)) || 0,
+        accWidth: parseFloat(gv('spineAccWidth', 88)) || 88,
+        boldAcc: gc('spineBoldAcc', false),
+        lexileFont: gv('spineLexileFontFamily', 'Arial, sans-serif'),
+        lexileSize: parseFloat(gv('spineLexileSize', 10)) || 10,
+        lexileAlign: gv('spineLexileAlign', 'center'),
+        lexileVAlign: gv('spineLexileVAlign', 'center'),
+        boldLexile: gc('spineBoldLexile', false)
+      };
+    }
+
+    function renderLabelHTML(itm) {
+      itm = itm || {};
+      var st = getSpineSettings();
+      var lines = [itm.sec, itm.cls, itm.cut, itm.vol, itm.yr].filter(Boolean);
+      var stackHtml = lines.length
+        ? '<div class="spine-stack" style="width:100%;font-family:' + st.font + ';font-size:' + st.stackSize + 'px;font-weight:' + (st.boldStack ? '700' : '400') + ';line-height:' + st.lineHeight + ';text-align:' + st.tAlign + ';">' +
+            lines.map(function(l) { return '<div>' + escapeHtml(l) + '</div>'; }).join('') +
+            (itm.lexile ? '<div style="font-family:' + (st.lexileFont === 'inherit' ? st.font : st.lexileFont) + ';font-size:' + st.lexileSize + 'px;font-weight:' + (st.boldLexile ? '700' : '400') + ';text-align:' + st.lexileAlign + ';">' + escapeHtml(itm.lexile) + '</div>' : '') +
+          '</div>'
+        : '';
+      var dividerStyle = st.dividerWidth > 0 ? 'border-top:' + st.dividerWidth + 'px solid #111;padding-top:2px;' : '';
+      var accHtml = itm.acc
+        ? '<div class="spine-acc" style="width:' + st.accWidth + '%;margin:0 auto;' + dividerStyle + 'font-family:' + st.accFont + ';font-size:' + st.accSize + 'px;font-weight:' + (st.boldAcc ? '700' : '400') + ';text-align:' + st.accAlign + ';transform:translate(' + st.accOffsetX + 'px,' + st.accOffsetY + 'px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escapeHtml(itm.acc) + '</div>'
+        : '';
+      var body = '';
+      if (st.order === 'acc-stack') body = accHtml + stackHtml;
+      else if (st.order === 'stack-only') body = stackHtml;
+      else if (st.order === 'acc-only') body = accHtml;
+      else body = stackHtml + accHtml;
+      return '<div class="spine-label-inner" style="width:100%;height:100%;box-sizing:border-box;padding:' + st.padding + 'mm;display:flex;flex-direction:column;justify-content:' + st.vAlign + ';gap:' + st.gap + 'px;overflow:hidden;">' + body + '</div>';
+    }
+
+    function updateSpineLivePreview() {
+      var slot = document.getElementById('spineLivePreviewSlot');
+      if (!slot) return;
+      function gv(id) { var el = document.getElementById(id); return el ? el.value.trim() : ''; }
+      var draft = {
+        sec: gv('section'), cls: gv('classNum'), cut: gv('cutter'),
+        vol: gv('volume'), yr: gv('year'), lexile: gv('spineLexileLevel'), acc: gv('accession')
+      };
+      slot.innerHTML = renderLabelHTML(draft);
+    }
+
+    function fitAllSpineLabels(container) {
+      if (!container) return;
+      // Optional hook kept safe so updateUI() completes without throwing.
+    }
+
+    function saveProgress() {
+      if (_isRestoringProgress) return;
+      var dt = {
+        sec: document.getElementById('section') ? document.getElementById('section').value : '',
+        cls: document.getElementById('classNum') ? document.getElementById('classNum').value : '',
+        cut: document.getElementById('cutter') ? document.getElementById('cutter').value : '',
+        vol: document.getElementById('volume') ? document.getElementById('volume').value : '',
+        yr: document.getElementById('year') ? document.getElementById('year').value : '',
+        lexile: document.getElementById('spineLexileLevel') ? document.getElementById('spineLexileLevel').value : '',
+        acc: document.getElementById('accession') ? document.getElementById('accession').value : ''
+      };
+      var payload = {
+        updatedAt: Date.now(),
+        startSlotIndex: stSl,
+        labelQueue: lblQ,
+        guideChecked: document.getElementById('guideToggle') ? document.getElementById('guideToggle').checked : false,
+        draft: dt,
+        layout: getSpineSettings()
+      };
+      var json = JSON.stringify(payload);
+      localStorage.setItem(getSK(), json);
+
+      if (currentStaff && currentStaff.id && typeof google !== 'undefined' && google.script && google.script.run) {
+        var staffId = currentStaff.id;
+        clearTimeout(_spineDriveSaveTimer);
+        _spineDriveSaveTimer = setTimeout(function() {
+          google.script.run.saveStaffToolProgress('spine', staffId, json);
+        }, 1200);
+      }
+    }
+
+    function loadProgress() {
+      var localData = null;
+      var raw = localStorage.getItem(getSK());
+      if (raw) {
+        try { localData = JSON.parse(raw); } catch (e) {}
+      }
+      applySpineProgressData(localData);
+
+      if (currentStaff && currentStaff.id && typeof google !== 'undefined' && google.script && google.script.run) {
+        var expectedKey = getSK();
+        google.script.run
+          .withSuccessHandler(function(res) {
+            if (getSK() !== expectedKey || !res || !res.success || !res.data) return;
+            try {
+              var remoteData = JSON.parse(res.data);
+              var localTs = (localData && Number(localData.updatedAt)) || 0;
+              var remoteTs = Number(remoteData.updatedAt) || 0;
+              if (!localData || remoteTs >= localTs) {
+                localStorage.setItem(expectedKey, res.data);
+                applySpineProgressData(remoteData);
+              }
+            } catch (e) {}
+          })
+          .loadStaffToolProgress('spine', currentStaff.id);
+      }
+    }
+        function toggleGuides(p) { if (p === undefined) p = true; var cb = document.getElementById('guideToggle'); if (cb && cb.checked) document.body.classList.add('print-guides'); else document.body.classList.remove('print-guides'); if (p) saveProgress(); }
+    function quickPullByAccession() {
+      var a = document.getElementById('labelAccQuick') ? document.getElementById('labelAccQuick').value.trim() : ''; if (!a) return;
+      var b = document.getElementById('btnAccQuick'); if (b) { b.disabled = true; b.textContent = '...'; }
+      google.script.run.withSuccessHandler(function(r) {
+        if (b) { b.disabled = false; b.textContent = 'Fetch'; }
+        if (r.success) {
+          /* Fetch Single Accession now adds the fetched record directly to the
+             label queue, which immediately renders it on the preview page. */
+          var fetched = {
+            sec: r.data.section || '',
+            cls: r.data.classNum || '',
+            cut: r.data.cutter || '',
+            vol: r.data.volume || '',
+            yr: r.data.year || '',
+            lexile: r.data.lexileLevel || '',
+            acc: r.data.accession || a,
+            style: getSpineSettings()
+          };
+          lblQ.push(fetched);
+          updateUI();
+          saveProgress();
+          updateSpineLivePreview();
+          document.getElementById('labelAccQuick').value = '';
+          document.getElementById('labelAccQuick').focus();
+          showToast('Added to label preview: ' + (r.data.title || fetched.acc), 'success');
+        } else { showToast(r.message, 'error'); document.getElementById('labelAccQuick').select(); }
+      }).withFailureHandler(function(e) { if (b) { b.disabled = false; b.textContent = 'Fetch'; } showToast(e.message, 'error'); }).fetchSpineLabelByAccession(a);
+    }
+
+    function formatSpineCopy_(val) {
+  const v = String(val == null ? '' : val).trim();
+  if (!v) return '';
+  if (/^copy\s*:/i.test(v)) return 'copy: ' + v.replace(/^copy\s*:\s*/i, '');
+  if (/^c\.?\s*\d+/i.test(v)) return 'copy: ' + v.replace(/^c\.?\s*/i, '');
+  return 'copy: ' + v;
+}
+
+// Lines ABOVE the horizontal divider line:
+const topLines = [
+  item.section,
+  item.classNum,
+  item.cutter,
+  item.volume,
+  item.year,
+  formatSpineCopy_(item.copy)
+].filter(Boolean);
+
+// Lines BELOW the horizontal divider line:
+const bottomLines = [
+  item.accession,
+  showLexile ? item.lexileLevel : ''
+].filter(Boolean);
+  
+    function quickPullByRange() {
+      var startEl = document.getElementById('rangeStartAcc'), endEl = document.getElementById('rangeEndAcc');
+      var sa = startEl ? startEl.value.trim() : '', ea = endEl ? endEl.value.trim() : '';
+      if (!sa || !ea) return showToast('Enter both the starting and ending accession numbers.', 'error');
+      if (typeof google === 'undefined' || !google.script || !google.script.run) return showToast('The Apps Script connection is unavailable. Open the deployed library web app and try again.', 'error');
+      var b = document.getElementById('btnRangeQuick');
+      if (b) { b.disabled = true; b.textContent = 'Loading...'; }
+      google.script.run.withSuccessHandler(function(r) {
+        if (b) { b.disabled = false; b.textContent = 'Queue'; }
+        if (!r || !r.success) { showToast(r && r.message ? r.message : 'Could not retrieve the accession range.', 'error'); return; }
+        if (!Array.isArray(r.labels) || !r.labels.length) { showToast('No matching accessions were returned.', 'error'); return; }
+        var added = 0;
+        for (var i = 0; i < r.labels.length; i++) {
+          var item = r.labels[i];
+          if (!item || !item.accession) continue;
+          lblQ.push({ sec: item.section || '', cls: item.classNum || '', cut: item.cutter || '', vol: item.volume || '', yr: item.year || '', lexile: item.lexileLevel || '', acc: item.accession || '' });
+          google.script.run.updateInventoryCallNumber(item.accession, [item.section, item.classNum, item.cutter, item.volume, item.year].filter(Boolean).join(' '), currentStaff ? currentStaff.name : 'Staff');
+          added++;
+        }
+        showToast('Added ' + added + ' of ' + r.count + ' labels to the queue.', 'success');
+        updateUI(); saveProgress();
+      }).withFailureHandler(function(e) {
+        if (b) { b.disabled = false; b.textContent = 'Queue'; }
+        showToast('Range lookup failed: ' + (e && e.message ? e.message : 'Unknown server error.'), 'error');
+      }).fetchSpineLabelsByRange(sa, ea);
+    }
+    var spineLexileLookupPending = false;
+    var spineLexileLookupSequence = 0;
+
+    function autoFetchSpineLexileForAccession(accession, callback) {
+      var acc = String(accession || '').trim();
+      if (!acc || typeof google === 'undefined' || !google.script || !google.script.run) {
+        if (callback) callback('');
+        return;
+      }
+      var seq = ++spineLexileLookupSequence;
+      google.script.run.withSuccessHandler(function(r) {
+        if (seq !== spineLexileLookupSequence) return;
+        var level = r && r.success && r.data ? String(r.data.lexileLevel || '').trim() : '';
+        var currentAcc = (document.getElementById('accession') || {}).value || '';
+        if (String(currentAcc).trim().toLowerCase() === acc.toLowerCase()) {
+          var field = document.getElementById('spineLexileLevel');
+          if (field && level) {
+            field.value = level;
+            saveProgress();
+            updateSpineLivePreview();
+          }
+        }
+        if (callback) callback(level);
+      }).withFailureHandler(function() {
+        if (callback) callback('');
+      }).fetchSpineLabelByAccession(acc);
+    }
+
+    var editingSpineLabelIndex = -1;
+
+    function syncSpineLabelEditControls() {
+      var addBtn = document.getElementById('spineAddLabelBtn');
+      var cancelBtn = document.getElementById('spineCancelEditBtn');
+      if (addBtn) addBtn.textContent = editingSpineLabelIndex >= 0 ? 'Save Label Changes' : '+ Add Label';
+      if (cancelBtn) cancelBtn.style.display = editingSpineLabelIndex >= 0 ? 'inline-flex' : 'none';
+    }
+
+    function loadSpineLabelStyle(style) {
+      if (!style) return;
+      var fields = {
+        spineLayoutOrder:'order', spineVerticalAlign:'vAlign', spineTextAlign:'tAlign',
+        spineFontFamily:'font', spineAccFontFamily:'accFont', spineAccVAlign:'accVAlign',
+        spineDividerWidth:'dividerWidth', spineLexileVAlign:'lexileVAlign',
+        spineStackSize:'stackSize', spineAccSize:'accSize', spineAccOffsetX:'accOffsetX',
+        spineAccOffsetY:'accOffsetY', spineAccAlign:'accAlign', spineAccWidth:'accWidth',
+        spineLexileSize:'lexileSize', spineLexileAlign:'lexileAlign',
+        spineLexileFontFamily:'lexileFont', spineLexileGap:'lexileGap',
+        spineLexileLineHeight:'lexileLineHeight', spinePadding:'padding',
+        spineLineHeight:'lineHeight', spineElementGap:'gap'
+      };
+      Object.keys(fields).forEach(function(id) {
+        var el = document.getElementById(id), key = fields[id];
+        if (el && style[key] !== undefined && style[key] !== null) el.value = style[key];
+      });
+      var checks = {spineBoldStack:'boldStack', spineBoldAcc:'boldAcc', spineBoldLexile:'boldLexile', spineShowDivider:'showDivider'};
+      Object.keys(checks).forEach(function(id) {
+        var el = document.getElementById(id), key = checks[id];
+        if (el && style[key] !== undefined) el.checked = Boolean(style[key]);
+      });
+      if (typeof updateUI === 'function') updateUI();
+      if (typeof updateSpineLivePreview === 'function') updateSpineLivePreview();
+      if (typeof saveProgress === 'function') saveProgress();
+    }
+        function editSpineLabel(index) {
+      if (index < 0 || index >= lblQ.length) return;
+      var item = lblQ[index];
+      editingSpineLabelIndex = index;
+      var ids = ['section','classNum','cutter','volume','year','spineLexileLevel','accession'];
+      var vals = [item.sec,item.cls,item.cut,item.vol,item.yr,item.lexile,item.acc];
+      for (var i = 0; i < ids.length; i++) {
+        var field = document.getElementById(ids[i]);
+        if (field) field.value = vals[i] || '';
+      }
+      // Keep the current global settings panel as the source of truth for all labels.
+      syncSpineLabelEditControls();
+      updateSpineLivePreview();
+      var first = document.getElementById('section');
+      if (first) first.focus();
+      showToast('Editing label ' + (index + 1) + '. Update the fields, then save changes.', 'info', 2600);
+    }
+
+    function cancelEditSpineLabel() {
+      if (editingSpineLabelIndex < 0) return;
+      editingSpineLabelIndex = -1;
+      var ids = ['section','classNum','cutter','volume','year','spineLexileLevel','accession'];
+      for (var i = 0; i < ids.length; i++) {
+        var field = document.getElementById(ids[i]);
+        if (field) field.value = ids[i] === 'section' ? 'Fic' : '';
+      }
+      syncSpineLabelEditControls();
+      updateSpineLivePreview();
+      saveProgress();
+    }
+
+    function addLabel(lexileLookupCompleted) {
+      function gv(id) { var el = document.getElementById(id); return el ? el.value.trim() : ''; }
+      var s = gv('section'), c = gv('classNum'), t = gv('cutter'), v = gv('volume'), y = gv('year'), lx = gv('spineLexileLevel'), a = gv('accession');
+
+      /* If an accession was typed or scanned manually, retrieve its stored Lexile
+         value before committing the label. The backend reads the Lexile Level
+         already stored in the Inventory sheet; it does not guess a measure. */
+      if (a && !lx && !lexileLookupCompleted) {
+        if (spineLexileLookupPending) return;
+        spineLexileLookupPending = true;
+        autoFetchSpineLexileForAccession(a, function(level) {
+          spineLexileLookupPending = false;
+          if (level) showToast('Lexile level found: ' + level, 'success', 1800);
+          addLabel(true);
+        });
+        return;
+      }
+
+      if (!s && !c && !t && !v && !y && !lx && !a) return;
+      var updatedLabel = { sec: s, cls: c, cut: t, vol: v, yr: y, lexile: lx, acc: a, style: getSpineSettings() };
+      var wasEditing = editingSpineLabelIndex >= 0;
+      if (wasEditing && editingSpineLabelIndex < lblQ.length) lblQ[editingSpineLabelIndex] = updatedLabel;
+      else lblQ.push(updatedLabel);
+      editingSpineLabelIndex = -1;
+      syncSpineLabelEditControls();
+      if (a && typeof google !== 'undefined' && google.script && google.script.run) google.script.run.updateInventoryCallNumber(a, [s, c, t, v, y].filter(Boolean).join(' '), currentStaff ? currentStaff.name : 'Staff');
+      var ids = ['section','classNum','cutter','volume','year','spineLexileLevel','accession']; for (var i = 0; i < ids.length; i++) { var el = document.getElementById(ids[i]); if (el) el.value = (ids[i] === 'section') ? 'Fic' : ''; }
+      document.getElementById('labelAccQuick').focus(); updateUI(); saveProgress(); updateSpineLivePreview(); showToast(wasEditing ? 'Label changes saved' : 'Label added', 'success', 2000);
+    }
+    function duplicateItem(i) { lblQ.splice(i + 1, 0, Object.assign({}, lblQ[i])); selectForCopy(i + 1); updateUI(); saveProgress(); showToast('Duplicated', 'info', 2000); }
+    function copyCallNumberOnly(i) {
+      cLbl = { sec: lblQ[i].sec, cls: lblQ[i].cls, cut: lblQ[i].cut, vol: lblQ[i].vol, yr: lblQ[i].yr, lexile: lblQ[i].lexile || '', acc: '' }; cQIdx = i;
+      var ids = ['section','classNum','cutter','volume','year','spineLexileLevel']; var vals = [cLbl.sec, cLbl.cls, cLbl.cut, cLbl.vol, cLbl.yr, cLbl.lexile];
+      for (var j = 0; j < ids.length; j++) { var el = document.getElementById(ids[j]); if (el) el.value = vals[j] || ''; }
+      document.getElementById('accession').value = ''; document.getElementById('accession').focus();
+      document.getElementById('copiedLabelName').textContent = vals.filter(Boolean).join(' ') + ' (No Acc)';
+      document.getElementById('clipboardBanner').style.display = 'block'; updateUI(); saveProgress(); updateSpineLivePreview();
+    }
+    function selectForCopy(i) {
+      cLbl = Object.assign({}, lblQ[i]); cQIdx = i;
+      var ids = ['section','classNum','cutter','volume','year','spineLexileLevel','accession']; var vals = [cLbl.sec, cLbl.cls, cLbl.cut, cLbl.vol, cLbl.yr, cLbl.lexile, cLbl.acc];
+      for (var j = 0; j < ids.length; j++) { var el = document.getElementById(ids[j]); if (el) el.value = vals[j] || ''; }
+      document.getElementById('copiedLabelName').textContent = vals.filter(Boolean).join(' ');
+      document.getElementById('clipboardBanner').style.display = 'block'; updateUI(); saveProgress(); updateSpineLivePreview();
+    }
+    function pasteToNextSlot() { if (!cLbl) return; lblQ.push(Object.assign({}, cLbl)); updateUI(); saveProgress(); showToast('Pasted to end', 'info', 2000); }
+    function clearCopiedBuffer() { cLbl = null; cQIdx = null; document.getElementById('clipboardBanner').style.display = 'none'; updateUI(); }
+    function removeLabel(i) { if (editingSpineLabelIndex === i) { editingSpineLabelIndex = -1; syncSpineLabelEditControls(); } else if (editingSpineLabelIndex > i) editingSpineLabelIndex--; if (cQIdx === i) clearCopiedBuffer(); selInd.delete(i); lblQ.splice(i, 1); updateUI(); saveProgress(); }
+    function toggleSelectLabel(i, cb) { if (cb.checked) selInd.add(i); else selInd.delete(i); document.getElementById('btnDeleteSelected').disabled = (selInd.size === 0); document.getElementById('selectAllCheckbox').checked = (selInd.size === lblQ.length); }
+    function toggleSelectAll(cb) { if (cb.checked) { for (var i = 0; i < lblQ.length; i++) selInd.add(i); } else selInd.clear(); updateUI(); }
+    function deleteSelectedLabels() { if (selInd.size === 0) return; if (editingSpineLabelIndex >= 0 && selInd.has(editingSpineLabelIndex)) { editingSpineLabelIndex = -1; syncSpineLabelEditControls(); } var nQ = []; for (var i = 0; i < lblQ.length; i++) if (!selInd.has(i)) nQ.push(lblQ[i]); lblQ = nQ; selInd.clear(); clearCopiedBuffer(); updateUI(); saveProgress(); }
+    function clearQueue() { editingSpineLabelIndex = -1; syncSpineLabelEditControls(); lblQ = []; selInd.clear(); stSl = 0; clearCopiedBuffer(); var ids = ['section','classNum','cutter','volume','year','spineLexileLevel','accession']; for (var i = 0; i < ids.length; i++) document.getElementById(ids[i]).value = (ids[i] === 'section') ? 'Fic' : ''; updateUI(); saveProgress(); updateSpineLivePreview(); showToast('Spine label queue reset.', 'info'); }
+    function handleSlotClick(idx, e) {
+      var qI = idx - stSl;
+      if (e.shiftKey && cLbl) {
+        if (idx < stSl) { var diff = stSl - idx - 1; for (var i = 0; i < diff; i++) lblQ.unshift({ sec: '', cls: '', cut: '', vol: '', yr: '', lexile: '', acc: '' }); lblQ.unshift(Object.assign({}, cLbl)); stSl = idx; }
+        else { while (lblQ.length < qI) lblQ.push({ sec: '', cls: '', cut: '', vol: '', yr: '', lexile: '', acc: '' }); lblQ[qI] = Object.assign({}, cLbl); }
+        updateUI(); saveProgress(); return;
+      }
+      if (qI >= 0 && qI < lblQ.length) { selectForCopy(qI); return; }
+      stSl = idx; updateUI(); saveProgress();
+    }
+    function updateUI() {
+      var c = document.getElementById('pagesContainer'); if (!c) return;
+      var tot = Math.ceil(Math.max(1, stSl + lblQ.length) / SPL); c.innerHTML = '';
+      for (var p = 0; p < tot; p++) {
+        var w = document.createElement('div'); w.className = 'sheet-wrapper';
+        w.innerHTML = '<div class="page-header-indicator"><span>PAGE ' + (p + 1) + ' OF ' + tot + '</span><span>(Slots ' + (p * SPL + 1) + ' - ' + ((p + 1) * SPL) + ')</span></div>';
+        var g = document.createElement('div'); g.className = 'sheet-grid';
+        for (var s = 0; s < SPL; s++) {
+          var gI = p * SPL + s; var sl = document.createElement('div'); sl.className = 'label-slot';
+          if (gI === stSl) sl.classList.add('start-point');
+          sl.onclick = (function(index) { return function(e) { handleSlotClick(index, e); }; })(gI);
+          var qI = gI - stSl;
+          if (qI >= 0 && qI < lblQ.length) {
+            sl.classList.add('occupied'); if (cQIdx === qI) sl.classList.add('copied-source');
+            var itm = lblQ[qI];
+            sl.classList.add('spine-editable-slot');
+            sl.innerHTML = renderLabelHTML(itm) + '<button type="button" class="spine-preview-edit-btn" title="Edit this label" onclick="event.stopPropagation(); editSpineLabel(' + qI + ')">Edit</button>';
+          }
+          g.appendChild(sl);
+        }
         w.appendChild(g); c.appendChild(w);
       }
       fitAllSpineLabels(c);
