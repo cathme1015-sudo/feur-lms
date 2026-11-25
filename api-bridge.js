@@ -626,12 +626,8 @@ window.FEUR_API_URL = "https://script.google.com/macros/s/AKfycbxYtoiXHUnPuLnQGb
 
 (function initSpineCopyPrefixFormatter() {
   function formatSpineCopyValue(raw) {
-    const v = String(raw || "").trim();
-    if (!v) return "";
-    if (/^copy\s*:/i.test(v)) return "copy: " + v.replace(/^copy\s*:\s*/i, "");
-    if (/^(v|vol)\.?\s*\d+/i.test(v)) return v;
-    if (/^c\.?\s*\d+/i.test(v)) return "copy: " + v.replace(/^c\.?\s*/i, "");
-    return "copy: " + v;
+    const isCopyInput = /copy/i.test(el.id || "");
+if (!isCopyInput) return;
   }
 
   document.addEventListener("change", (e) => {
