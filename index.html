@@ -3429,7 +3429,15 @@ body.dark-mode #tab-labels .spine-setting-dropdown input:not([type="checkbox"]) 
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
 
 <style id="header-lora-font">
+  html, body {
+    overflow-x: clip !important;
+  }
+
   .modern-topbar {
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 950 !important;
+    overflow: visible !important;
     padding-left: 28px !important;
     padding-right: 24px !important;
   }
