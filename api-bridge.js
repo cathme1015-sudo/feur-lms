@@ -623,3 +623,29 @@ window.FEUR_API_URL = "https://script.google.com/macros/s/AKfycbxYtoiXHUnPuLnQGb
     bindCatalogDraftEvents();
   }
 })();
+
+(function initSpineCopyPrefixFormatter() {
+  function formatSpineCopyValue(raw) {
+    const v = String(raw || "").trim();
+    if (!v) return "";
+    if (/^copy\s*:/i.test(v)) return "copy: " + v.replace(/^copy\s*:\s*/i, "");
+    if (/^(v|vol)\.?\s*\d+/i.test(v)) return v;
+    if (/^c\.?\s*\d+/i.test(v)) return "copy: " + v.replace(/^c\.?\s*/i, "");
+    return "copy: " + v;
+  }
+
+  document.addEventListener("change", (e) => {
+    const el = e.target;
+    if (!el || el.tagName !== "INPUT") return;
+    const isVolumeInput =
+      /volume|copy/i.test(el.id || "") ||
+      /c\.1,\s*v\.1/i.test(el.placeholder || "");
+    if (!isVolumeInput) return;
+
+    const formatted = formatSpineCopyValue(el.value);
+    if (formatted !== el.value) {
+      el.value = formatted;
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+  });
+})();
