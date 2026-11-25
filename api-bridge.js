@@ -117,11 +117,11 @@ window.FEUR_API_URL = "https://script.google.com/macros/s/AKfycbxYtoiXHUnPuLnQGb
           const libraryKey = localStorage.getItem("FEUR_ACTIVE_LIBRARY") || "ELEMENTARY";
 
           if (fnName === "setActiveLibrary" && data.result) {
-  Object.keys(localStorage).forEach((k) => {
-    if (k.startsWith("feur_cache_")) localStorage.removeItem(k);
-  });
-  data.result.appUrl = window.location.origin + window.location.pathname;
-}
+            Object.keys(localStorage).forEach((k) => {
+           if (k.startsWith("feur_cache_")) localStorage.removeItem(k);
+        });
+        data.result.appUrl = window.location.origin + window.location.pathname;
+        }
 
           const args = await Promise.all(
             rawArgs.map((arg) =>
