@@ -3425,11 +3425,38 @@ body.dark-mode #tab-labels .spine-setting-dropdown input:not([type="checkbox"]) 
 }
 </style>
 
-<style id="header-lora-font">
+<!-- Optional: Load a different Google Font (Inter and Lora are already loaded) -->
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
+
+<style id="header-inter-font">
+  /* Header bar height and outer left/right padding */
+  .modern-topbar {
+    height: auto !important;
+    min-height: 66px !important;
+    padding: 8px 24px !important;
+  }
+
+  /* Padding around the brand container */
+  .modern-topbar .feu-header-brand {
+    padding: 4px 12px 4px 0 !important;
+  }
+
+  /* Font style and inner padding of "FEUR Rodriguez Libraries" */
   .modern-topbar .feu-header-brand strong {
-    font-family: 'Lora', Georgia, serif !important;
-    font-size: 20px !important;
+    font-family: 'Playfair Display', 'Lora', serif !important;
+    font-size: 22px !important;
     font-weight: 700 !important;
+    font-style: normal !important; /* Use "italic" for italicized text */
+    letter-spacing: 0.02em !important;
+    padding: 6px 10px !important;
+  }
+
+  /* Mobile size and padding */
+  @media (max-width: 700px) {
+    .modern-topbar .feu-header-brand strong {
+      font-size: 15px !important;
+      padding: 4px 6px !important;
+    }
   }
 </style>
 
@@ -4465,7 +4492,7 @@ html body header.modern-topbar .feu-lock-btn {
   <button class="mobile-nav-fab" type="button" onclick="toggleMobileSidebar()" aria-label="Open navigation">☰</button>
   <header class="modern-topbar">
     <div class="feu-header-brand">
-      <strong>FEUR Rodriguez Libraries</strong>
+      <img src="./header-title.png" alt="FEUR Rodriguez Libraries" class="header-title-img">
     </div>
     <div class="feu-header-right">
       <span id="roleBadge" class="role-badge role-patron">Patron View</span>
