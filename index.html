@@ -4539,7 +4539,7 @@ html body header.modern-topbar .feu-lock-btn {
       </aside>
       <div class="attendance-kiosk-column">
       <div class="feu-attendance-card">
-        <div class="feu-kiosk-logo"><img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQHhGAiVtTXBoOE9YBGAd_BDyznkWrBIlk1Pj2A_niEg8rlRF5UoXLOe5A&s=10" alt="FEU Roosevelt EED Library"></div>
+        <div class="feu-kiosk-logo"><img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQHhGAiVtTXBoOE9YBGAd_BDyznkWrBIlk1Pj2A_niEg8rlRF5UoXLOe5A&s=10" alt="FEU Roosevelt Libraries"></div>
         <h1>Attendance Kiosk</h1>
         <p>Elementary Library</p>
         <div class="attendance-type-switch" style="margin:14px 0;text-align:left;">
@@ -4774,7 +4774,7 @@ html body header.modern-topbar .feu-lock-btn {
         <section class="homepage-hero">
           <div class="homepage-hero-overlay"></div>
           <div class="homepage-hero-content">
-            <div class="homepage-hero-label">FEU Roosevelt EED Library</div>
+            <div class="homepage-hero-label">FEU Roosevelt Libraries</div>
             <h1>Welcome to the Library</h1>
             <p>Discover books, learning materials, digital resources, and everything you need to support your learning journey.</p>
             <div class="homepage-hero-actions">
@@ -4870,7 +4870,7 @@ html body header.modern-topbar .feu-lock-btn {
 
         <footer class="homepage-footer">
           <strong>FEU Roosevelt - Rodriguez Campus</strong><br>
-          EED Library · Library Services and Resources
+          Library Services and Resources
         </footer>
 
         <!-- Hidden dashboard targets retained for existing statistics refresh logic. -->
@@ -5630,7 +5630,7 @@ EED-GC0002" oninput="updateCircBatchCounter()"></textarea>
                 <div class="acq-invoice-field"><label for="invoiceSearchAuthor">Author:</label><input id="invoiceSearchAuthor" type="text" autocomplete="off"></div>
                 <div class="acq-invoice-field"><label for="invoiceSearchPublisher">Publisher:</label><input id="invoiceSearchPublisher" type="text" autocomplete="off"></div>
                 <div class="acq-invoice-field"><label for="invoiceSearchYear">Publication year:</label><input id="invoiceSearchYear" type="text" inputmode="numeric" autocomplete="off"></div>
-                <div class="acq-invoice-field"><label for="invoiceSearchLibrary">Library:</label><select id="invoiceSearchLibrary"><option value="">All</option><option value="FEU Roosevelt EED Library">FEU Roosevelt EED Library</option></select></div>
+                <div class="acq-invoice-field"><label for="invoiceSearchLibrary">Library:</label><select id="invoiceSearchLibrary"><option value="">All</option><option value="FEU Roosevelt Libraries">FEU Roosevelt Libraries</option></select></div>
                 <div class="acq-invoice-actions"><button type="button" class="btn" onclick="searchInvoices()">Search</button><button type="button" class="btn btn-secondary" onclick="clearInvoiceSearch()">Clear</button></div>
               </div>
               <div class="acq-invoice-results">
@@ -9996,9 +9996,9 @@ function getSpineSettings() {
       var count=document.getElementById('invoiceResultCount'),q=invoiceSearchData();
       if(q.billingFrom||q.billingTo)showToast('Billing date filtering is available in the form, but billing dates are not yet stored in the Acquisitions sheet.','info',3000);
       var filters={vendor:q.vendor,isbn:q.isbn,title:q.title,author:q.author,from:q.shipmentFrom,to:q.shipmentTo};
-      google.script.run.withSuccessHandler(function(rows){rows=rows||[];var filtered=rows.filter(function(r){if(q.invoice&&!invoiceTextMatch(r.invoice,q.invoice))return false;if(q.publisher&&!invoiceTextMatch(r.publisher,q.publisher))return false;if(q.year&&!invoiceTextMatch(r.year,q.year))return false;if(q.library&&q.library!=='FEU Roosevelt EED Library')return false;return true;});renderInvoiceRows(filtered);if(count)count.textContent=filtered.length+' result'+(filtered.length===1?'':'s');}).withFailureHandler(function(err){if(body)body.innerHTML='<tr><td colspan="12" class="acq-empty">Unable to load invoices.</td></tr>';if(count)count.textContent='0 results';showToast((err&&err.message)||'Unable to load invoices.','error',2500);}).fetchAcquisitions(filters,500);
+      google.script.run.withSuccessHandler(function(rows){rows=rows||[];var filtered=rows.filter(function(r){if(q.invoice&&!invoiceTextMatch(r.invoice,q.invoice))return false;if(q.publisher&&!invoiceTextMatch(r.publisher,q.publisher))return false;if(q.year&&!invoiceTextMatch(r.year,q.year))return false;if(q.library&&q.library!=='FEU Roosevelt Libraries')return false;return true;});renderInvoiceRows(filtered);if(count)count.textContent=filtered.length+' result'+(filtered.length===1?'':'s');}).withFailureHandler(function(err){if(body)body.innerHTML='<tr><td colspan="12" class="acq-empty">Unable to load invoices.</td></tr>';if(count)count.textContent='0 results';showToast((err&&err.message)||'Unable to load invoices.','error',2500);}).fetchAcquisitions(filters,500);
     }
-    function renderInvoiceRows(rows){var body=document.getElementById('invoiceResultsBody');if(!body)return;if(!rows.length){body.innerHTML='<tr><td colspan="12" class="acq-empty">No invoices found.</td></tr>';return;}body.innerHTML=rows.map(function(r){return '<tr><td>'+analyticsEscape(r.invoice||'—')+'</td><td>'+analyticsEscape(r.vendor||'')+'</td><td>'+analyticsEscape(r.date||'')+'</td><td>—</td><td>'+analyticsEscape(r.isbn||'')+'</td><td>'+analyticsEscape(r.title||'')+'</td><td>'+analyticsEscape(r.author||'')+'</td><td>'+analyticsEscape(r.publisher||'')+'</td><td>'+analyticsEscape(r.year||'')+'</td><td>FEU Roosevelt EED Library</td><td class="num">'+analyticsEscape(r.cost===''?'':Number(r.cost).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}))+'</td><td>'+analyticsEscape(r.status||'')+'</td></tr>';}).join('');}
+    function renderInvoiceRows(rows){var body=document.getElementById('invoiceResultsBody');if(!body)return;if(!rows.length){body.innerHTML='<tr><td colspan="12" class="acq-empty">No invoices found.</td></tr>';return;}body.innerHTML=rows.map(function(r){return '<tr><td>'+analyticsEscape(r.invoice||'—')+'</td><td>'+analyticsEscape(r.vendor||'')+'</td><td>'+analyticsEscape(r.date||'')+'</td><td>—</td><td>'+analyticsEscape(r.isbn||'')+'</td><td>'+analyticsEscape(r.title||'')+'</td><td>'+analyticsEscape(r.author||'')+'</td><td>'+analyticsEscape(r.publisher||'')+'</td><td>'+analyticsEscape(r.year||'')+'</td><td>FEU Roosevelt Libraries</td><td class="num">'+analyticsEscape(r.cost===''?'':Number(r.cost).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}))+'</td><td>'+analyticsEscape(r.status||'')+'</td></tr>';}).join('');}
 
     function acqHideHomeCards(){['acqDashboardCard','acqSearchCard','acqRecordsCard','acqEntryCard','acqVendorListView','acqVendorView','acqInvoiceView','acqOrderView','acqOrderFormView','acqStatsView','acqBudgetView','acqBudgetFormView'].forEach(function(id){var e=document.getElementById(id);if(e)e.hidden=true;});}
     function acqShowHomeCards(){setAcqPrimaryAction('home');setAcqRefreshAction('home');['acqDashboardCard','acqSearchCard','acqRecordsCard'].forEach(function(id){var e=document.getElementById(id);if(e)e.hidden=false;});['acqEntryCard','acqVendorListView','acqVendorView','acqInvoiceView','acqOrderView','acqOrderFormView','acqStatsView','acqBudgetView','acqBudgetFormView'].forEach(function(id){var e=document.getElementById(id);if(e)e.hidden=true;});var title=document.querySelector('#tab-acquisition .acq-topbar h2');if(title)title.textContent='Acquisitions';var sub=document.querySelector('#tab-acquisition .acq-topbar .subtitle');if(sub)sub.textContent='Manage newly acquired library materials, vendors, orders and acquisition records.';}
