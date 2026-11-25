@@ -149,9 +149,39 @@ window.FEUR_API_URL = "https://script.google.com/macros/s/AKfycbxYtoiXHUnPuLnQGb
               throw new Error((data && data.error) || "Server error");
             }
 
-            if (fnName === "setActiveLibrary" && data.result && data.result.appUrl) {
-              data.result.appUrl = window.location.origin + window.location.pathname;
-            }
+            if (fnName === "setActiveLibrary" && data.result && data.result.success) {
+  localStorage.setItem(
+    "FEUR_ACTIVE_LIBRARY",
+    String(data.result.libraryKey || rawArgs[0] || "ELEMENTARY").toUpperCase()
+  );
+  Object.keys(localStorage).forEach((k) => {
+    if (k.startsWith("feur_cache_")) localStorage.removeItem(k);
+  });
+  data.result.appUrl = window.location.origin + window.location.pathname;
+}
+
+const isCatalogSave =
+  (fnName === "saveBookToInventory" || fnName === "updateLibraryItem") &&
+  data.result &&
+  data.result.success;
+
+if (isCatalogSave && typeof window.clearCatalogDraft === "function") {
+  window.clearCatalogDraft();
+}
+
+if (CACHEABLE_READS.has(fnName)) {
+  try { localStorage.setItem(cacheKey, JSON.stringify(data.result)); } catch (e) {}
+}
+
+if (typeof successHandler === "function") {
+  successHandler(data.result, userObject);
+}
+
+if (fnName === "setActiveLibrary" && data.result && data.result.success) {
+  setTimeout(() => {
+    window.location.reload();
+  }, 300);
+}
 
             const isCatalogSave =
               (fnName === "saveBookToInventory" || fnName === "updateLibraryItem") &&
