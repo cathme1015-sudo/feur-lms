@@ -11595,17 +11595,68 @@ html body > main { margin-top: 0 !important; padding-top: 0 !important; }
 
   <script id="spine-label-layout-override">
 (function () {
+  window.stSl = typeof window.stSl === 'number' ? window.stSl : 0;
+  window.lblQ = Array.isArray(window.lblQ) ? window.lblQ : [];
+  window.selInd = window.selInd instanceof Set ? window.selInd : new Set();
+  window.cLbl = window.cLbl || null;
+  window.cQIdx = window.cQIdx !== undefined ? window.cQIdx : null;
+  window.SPL = window.SPL || 36;
+
+  var _isRestoringProgress = false;
+  var _spineDriveSaveTimer = null;
+  var spineLexileLookupPending = false;
+  var spineLexileLookupSequence = 0;
+  var editingSpineLabelIndex = -1;
+
+  function getActiveLibraryKeyForStorage() {
+    var sel = document.getElementById('activeLibrarySelect');
+    return (sel && sel.value) ? sel.value : (localStorage.getItem('FEUR_ACTIVE_LIBRARY') || 'ELEMENTARY');
+  }
+
+  function getSK() {
+    var staffId = (typeof currentStaff !== 'undefined' && currentStaff && currentStaff.id) ? currentStaff.id : 'guest';
+    return 'feu_spine_labels_' + getActiveLibraryKeyForStorage() + '_' + staffId;
+  }
+
   function formatSpineCopy_(val) {
     var v = String(val == null ? '' : val).trim();
     if (!v) return '';
     if (/^copy\s*:/i.test(v)) return 'copy: ' + v.replace(/^copy\s*:\s*/i, '');
-    if (/^c\.?\s*\d+/i.test(v)) return 'copy: ' + v.replace(/^c\.?\s*\d+/i, '');
+    if (/^c\.?\s*\d+/i.test(v)) return 'copy: ' + v.replace(/^c\.?\s*/i, '');
     return 'copy: ' + v;
   }
 
-  window.formatSpineCopy_ = formatSpineCopy_;
+  function getSpineSettings() {
+    function gv(id, def) { var el = document.getElementById(id); return el ? el.value : def; }
+    function gc(id, def) { var el = document.getElementById(id); return el ? !!el.checked : def; }
+    return {
+      order: gv('spineLayoutOrder', 'stack-acc'),
+      vAlign: gv('spineVerticalAlign', 'space-between'),
+      tAlign: gv('spineTextAlign', 'center'),
+      lineHeight: parseFloat(gv('spineLineHeight', 1.5)) || 1.5,
+      padding: parseFloat(gv('spinePadding', 1.5)) || 1.5,
+      gap: parseFloat(gv('spineElementGap', 4)) || 0,
+      font: gv('spineFontFamily', "'Inter', sans-serif"),
+      stackSize: parseFloat(gv('spineStackSize', 13)) || 13,
+      boldStack: gc('spineBoldStack', true),
+      accFont: gv('spineAccFontFamily', "'Inter', sans-serif"),
+      accSize: parseFloat(gv('spineAccSize', 10)) || 10,
+      accAlign: gv('spineAccAlign', 'center'),
+      accVAlign: gv('spineAccVAlign', 'center'),
+      dividerWidth: parseFloat(gv('spineDividerWidth', 2)) || 0,
+      accOffsetX: parseFloat(gv('spineAccOffsetX', 0)) || 0,
+      accOffsetY: parseFloat(gv('spineAccOffsetY', 0)) || 0,
+      accWidth: parseFloat(gv('spineAccWidth', 88)) || 88,
+      boldAcc: gc('spineBoldAcc', false),
+      lexileFont: gv('spineLexileFontFamily', 'Arial, sans-serif'),
+      lexileSize: parseFloat(gv('spineLexileSize', 10)) || 10,
+      lexileAlign: gv('spineLexileAlign', 'center'),
+      lexileVAlign: gv('spineLexileVAlign', 'center'),
+      boldLexile: gc('spineBoldLexile', false)
+    };
+  }
 
-  window.renderLabelHTML = function (itm) {
+  function renderLabelHTML(itm) {
     itm = itm || {};
     var st = getSpineSettings();
     var topLines = [
@@ -11641,9 +11692,9 @@ html body > main { margin-top: 0 !important; padding-top: 0 !important; }
     else if (st.order === 'acc-only') body = accHtml;
     else body = stackHtml + accHtml;
     return '<div class="spine-label-inner" style="width:100%;height:100%;box-sizing:border-box;padding:' + st.padding + 'mm;display:flex;flex-direction:column;justify-content:' + st.vAlign + ';gap:' + st.gap + 'px;overflow:hidden;">' + body + '</div>';
-  };
+  }
 
-  window.updateSpineLivePreview = function () {
+  function updateSpineLivePreview() {
     var slot = document.getElementById('spineLivePreviewSlot');
     if (!slot) return;
     function gv(id) { var el = document.getElementById(id); return el ? el.value.trim() : ''; }
@@ -11657,29 +11708,314 @@ html body > main { margin-top: 0 !important; padding-top: 0 !important; }
       lexile: gv('spineLexileLevel'),
       acc: gv('accession')
     });
-  };
+  }
 
-  window.sendToSpineMaker = function () {
-    var a = document.getElementById('bookAccession').value.trim();
-    if (!a) return showToast('Need Accession', 'error');
-    document.getElementById('section').value = document.getElementById('bookSection').value;
-    document.getElementById('classNum').value = document.getElementById('bookClassNum').value;
-    document.getElementById('cutter').value = document.getElementById('bookCutter').value;
-    document.getElementById('spineVolume').value = document.getElementById('bookVolume').value;
-    document.getElementById('year').value = document.getElementById('bookYear').value;
-    document.getElementById('spineCopy').value = document.getElementById('bookCopyNumber').value;
-    document.getElementById('spineLexileLevel').value = document.getElementById('bookLexileLevel').value;
-    document.getElementById('accession').value = a;
-    switchTab('labels');
+  function fitAllSpineLabels(container) {
+    if (!container) return;
+  }
+
+  function loadSpineLabelStyle(style) {
+    if (!style) return;
+    var fields = {
+      spineLayoutOrder:'order', spineVerticalAlign:'vAlign', spineTextAlign:'tAlign',
+      spineFontFamily:'font', spineAccFontFamily:'accFont', spineAccVAlign:'accVAlign',
+      spineDividerWidth:'dividerWidth', spineLexileVAlign:'lexileVAlign',
+      spineStackSize:'stackSize', spineAccSize:'accSize', spineAccOffsetX:'accOffsetX',
+      spineAccOffsetY:'accOffsetY', spineAccAlign:'accAlign', spineAccWidth:'accWidth',
+      spineLexileSize:'lexileSize', spineLexileAlign:'lexileAlign',
+      spineLexileFontFamily:'lexileFont', spinePadding:'padding',
+      spineLineHeight:'lineHeight', spineElementGap:'gap'
+    };
+    Object.keys(fields).forEach(function (id) {
+      var el = document.getElementById(id), key = fields[id];
+      if (el && style[key] !== undefined && style[key] !== null) el.value = style[key];
+    });
+    var checks = {spineBoldStack:'boldStack', spineBoldAcc:'boldAcc', spineBoldLexile:'boldLexile'};
+    Object.keys(checks).forEach(function (id) {
+      var el = document.getElementById(id), key = checks[id];
+      if (el && style[key] !== undefined) el.checked = Boolean(style[key]);
+    });
+  }
+
+  function toggleGuides(p) {
+    if (p === undefined) p = true;
+    var cb = document.getElementById('guideToggle');
+    if (cb && cb.checked) document.body.classList.add('print-guides');
+    else document.body.classList.remove('print-guides');
+    if (p) saveProgress();
+  }
+
+  function saveProgress() {
+    if (_isRestoringProgress) return;
+    var dt = {
+      sec: document.getElementById('section') ? document.getElementById('section').value : '',
+      cls: document.getElementById('classNum') ? document.getElementById('classNum').value : '',
+      cut: document.getElementById('cutter') ? document.getElementById('cutter').value : '',
+      vol: document.getElementById('spineVolume') ? document.getElementById('spineVolume').value : '',
+      yr: document.getElementById('year') ? document.getElementById('year').value : '',
+      copy: document.getElementById('spineCopy') ? document.getElementById('spineCopy').value : '',
+      lexile: document.getElementById('spineLexileLevel') ? document.getElementById('spineLexileLevel').value : '',
+      acc: document.getElementById('accession') ? document.getElementById('accession').value : ''
+    };
+    var payload = {
+      updatedAt: Date.now(),
+      startSlotIndex: stSl,
+      labelQueue: lblQ,
+      guideChecked: document.getElementById('guideToggle') ? document.getElementById('guideToggle').checked : false,
+      draft: dt,
+      layout: getSpineSettings()
+    };
+    var json = JSON.stringify(payload);
+    localStorage.setItem(getSK(), json);
+
+    if (typeof currentStaff !== 'undefined' && currentStaff && currentStaff.id && typeof google !== 'undefined' && google.script && google.script.run) {
+      var staffId = currentStaff.id;
+      clearTimeout(_spineDriveSaveTimer);
+      _spineDriveSaveTimer = setTimeout(function () {
+        google.script.run.saveStaffToolProgress('spine', staffId, json);
+      }, 1200);
+    }
+  }
+
+  function applySpineProgressData(data) {
+    _isRestoringProgress = true;
+    try {
+      stSl = 0; lblQ = []; selInd.clear();
+      if (data) {
+        stSl = Number.isFinite(Number(data.startSlotIndex)) ? Math.max(0, Number(data.startSlotIndex)) : 0;
+        lblQ = Array.isArray(data.labelQueue) ? data.labelQueue : [];
+        if (document.getElementById('guideToggle')) document.getElementById('guideToggle').checked = Boolean(data.guideChecked);
+        toggleGuides(false);
+        if (data.draft) {
+          var ids = ['section','classNum','cutter','spineVolume','year','spineCopy','spineLexileLevel','accession'];
+          var vals = [data.draft.sec, data.draft.cls, data.draft.cut, data.draft.vol, data.draft.yr, data.draft.copy, data.draft.lexile, data.draft.acc];
+          for (var i = 0; i < ids.length; i++) {
+            var field = document.getElementById(ids[i]);
+            if (field) field.value = vals[i] == null ? '' : vals[i];
+          }
+        }
+        if (data.layout) loadSpineLabelStyle(data.layout);
+      }
+      updateUI();
+      updateSpineLivePreview();
+    } finally {
+      _isRestoringProgress = false;
+    }
+  }
+
+  function loadProgress() {
+    var localData = null;
+    var raw = localStorage.getItem(getSK());
+    if (raw) {
+      try { localData = JSON.parse(raw); } catch (e) {}
+    }
+    applySpineProgressData(localData);
+
+    if (typeof currentStaff !== 'undefined' && currentStaff && currentStaff.id && typeof google !== 'undefined' && google.script && google.script.run) {
+      var expectedKey = getSK();
+      google.script.run
+        .withSuccessHandler(function (res) {
+          if (getSK() !== expectedKey || !res || !res.success || !res.data) return;
+          try {
+            var remoteData = JSON.parse(res.data);
+            var localTs = (localData && Number(localData.updatedAt)) || 0;
+            var remoteTs = Number(remoteData.updatedAt) || 0;
+            if (!localData || remoteTs >= localTs) {
+              localStorage.setItem(expectedKey, res.data);
+              applySpineProgressData(remoteData);
+            }
+          } catch (e) {}
+        })
+        .loadStaffToolProgress('spine', currentStaff.id);
+    }
+  }
+
+  function syncSpineLabelEditControls() {
+    var addBtn = document.getElementById('spineAddLabelBtn');
+    var cancelBtn = document.getElementById('spineCancelEditBtn');
+    if (addBtn) addBtn.textContent = editingSpineLabelIndex >= 0 ? 'Save Label Changes' : '+ Add Label';
+    if (cancelBtn) cancelBtn.style.display = editingSpineLabelIndex >= 0 ? 'inline-flex' : 'none';
+  }
+
+  function autoFetchSpineLexileForAccession(accession, callback) {
+    var acc = String(accession || '').trim();
+    if (!acc || typeof google === 'undefined' || !google.script || !google.script.run) {
+      if (callback) callback('');
+      return;
+    }
+    var seq = ++spineLexileLookupSequence;
+    google.script.run.withSuccessHandler(function (r) {
+      if (seq !== spineLexileLookupSequence) return;
+      var level = r && r.success && r.data ? String(r.data.lexileLevel || '').trim() : '';
+      var currentAcc = (document.getElementById('accession') || {}).value || '';
+      if (String(currentAcc).trim().toLowerCase() === acc.toLowerCase()) {
+        var field = document.getElementById('spineLexileLevel');
+        if (field && level) {
+          field.value = level;
+          saveProgress();
+          updateSpineLivePreview();
+        }
+      }
+      if (callback) callback(level);
+    }).withFailureHandler(function () {
+      if (callback) callback('');
+    }).fetchSpineLabelByAccession(acc);
+  }
+
+  function addLabel(lexileLookupCompleted) {
+    function gv(id) { var el = document.getElementById(id); return el ? el.value.trim() : ''; }
+    var s = gv('section'), c = gv('classNum'), t = gv('cutter'), v = gv('spineVolume'), y = gv('year'), cp = gv('spineCopy'), lx = gv('spineLexileLevel'), a = gv('accession');
+    if (a && !lx && !lexileLookupCompleted) {
+      if (spineLexileLookupPending) return;
+      spineLexileLookupPending = true;
+      autoFetchSpineLexileForAccession(a, function (level) {
+        spineLexileLookupPending = false;
+        if (level) showToast('Lexile level found: ' + level, 'success', 1800);
+        addLabel(true);
+      });
+      return;
+    }
+    if (!s && !c && !t && !v && !y && !cp && !lx && !a) return;
+    var updatedLabel = { sec: s, cls: c, cut: t, vol: v, yr: y, copy: cp, lexile: lx, acc: a, style: getSpineSettings() };
+    var wasEditing = editingSpineLabelIndex >= 0;
+    if (wasEditing && editingSpineLabelIndex < lblQ.length) lblQ[editingSpineLabelIndex] = updatedLabel;
+    else lblQ.push(updatedLabel);
+    editingSpineLabelIndex = -1;
+    syncSpineLabelEditControls();
+    if (a && typeof google !== 'undefined' && google.script && google.script.run) {
+      google.script.run.updateInventoryCallNumber(a, [s, c, t, v, y].filter(Boolean).join(' '), (typeof currentStaff !== 'undefined' && currentStaff) ? currentStaff.name : 'Staff');
+    }
+    var ids = ['section','classNum','cutter','spineVolume','year','spineCopy','spineLexileLevel','accession'];
+    for (var i = 0; i < ids.length; i++) {
+      var el = document.getElementById(ids[i]);
+      if (el) el.value = (ids[i] === 'section') ? 'Fic' : '';
+    }
+    var qInp = document.getElementById('labelAccQuick');
+    if (qInp) qInp.focus();
+    updateUI();
+    saveProgress();
     updateSpineLivePreview();
-    showToast('Transferred to Spine Labels', 'info');
-  };
+    showToast(wasEditing ? 'Label changes saved' : 'Label added', 'success', 2000);
+  }
 
-  window.quickPullByAccession = function () {
-    var a = document.getElementById('labelAccQuick') ? document.getElementById('labelAccQuick').value.trim() : '';
-    if (!a) return;
-    var b = document.getElementById('btnAccQuick');
-    if (b) { b.disabled = true; b.textContent = '...'; }
+  function editSpineLabel(index) {
+    if (index < 0 || index >= lblQ.length) return;
+    var item = lblQ[index];
+    editingSpineLabelIndex = index;
+    var ids = ['section','classNum','cutter','spineVolume','year','spineCopy','spineLexileLevel','accession'];
+    var vals = [item.sec, item.cls, item.cut, item.vol, item.yr, item.copy, item.lexile, item.acc];
+    for (var i = 0; i < ids.length; i++) {
+      var field = document.getElementById(ids[i]);
+      if (field) field.value = vals[i] || '';
+    }
+    syncSpineLabelEditControls();
+    updateSpineLivePreview();
+  }
+
+  function cancelEditSpineLabel() {
+    if (editingSpineLabelIndex < 0) return;
+    editingSpineLabelIndex = -1;
+    var ids = ['section','classNum','cutter','spineVolume','year','spineCopy','spineLexileLevel','accession'];
+    for (var i = 0; i < ids.length; i++) {
+      var field = document.getElementById(ids[i]);
+      if (field) field.value = ids[i] === 'section' ? 'Fic' : '';
+    }
+    syncSpineLabelEditControls();
+    updateSpineLivePreview();
+    saveProgress();
+  }
+
+  function duplicateItem(i) { lblQ.splice(i + 1, 0, Object.assign({}, lblQ[i])); selectForCopy(i + 1); updateUI(); saveProgress(); showToast('Duplicated', 'info', 2000); }
+
+  function copyCallNumberOnly(i) {
+    cLbl = { sec: lblQ[i].sec, cls: lblQ[i].cls, cut: lblQ[i].cut, vol: lblQ[i].vol, yr: lblQ[i].yr, copy: lblQ[i].copy || '', lexile: lblQ[i].lexile || '', acc: '' }; cQIdx = i;
+    var ids = ['section','classNum','cutter','spineVolume','year','spineCopy','spineLexileLevel'];
+    var vals = [cLbl.sec, cLbl.cls, cLbl.cut, cLbl.vol, cLbl.yr, cLbl.copy, cLbl.lexile];
+    for (var j = 0; j < ids.length; j++) { var el = document.getElementById(ids[j]); if (el) el.value = vals[j] || ''; }
+    document.getElementById('accession').value = '';
+    document.getElementById('accession').focus();
+    document.getElementById('copiedLabelName').textContent = vals.filter(Boolean).join(' ') + ' (No Acc)';
+    document.getElementById('clipboardBanner').style.display = 'block';
+    updateUI(); saveProgress(); updateSpineLivePreview();
+  }
+
+  function selectForCopy(i) {
+    cLbl = Object.assign({}, lblQ[i]); cQIdx = i;
+    var ids = ['section','classNum','cutter','spineVolume','year','spineCopy','spineLexileLevel','accession'];
+    var vals = [cLbl.sec, cLbl.cls, cLbl.cut, cLbl.vol, cLbl.yr, cLbl.copy, cLbl.lexile, cLbl.acc];
+    for (var j = 0; j < ids.length; j++) { var el = document.getElementById(ids[j]); if (el) el.value = vals[j] || ''; }
+    document.getElementById('copiedLabelName').textContent = vals.filter(Boolean).join(' ');
+    document.getElementById('clipboardBanner').style.display = 'block';
+    updateUI(); saveProgress(); updateSpineLivePreview();
+  }
+
+  function pasteToNextSlot() { if (!cLbl) return; lblQ.push(Object.assign({}, cLbl)); updateUI(); saveProgress(); showToast('Pasted to end', 'info', 2000); }
+  function clearCopiedBuffer() { cLbl = null; cQIdx = null; var b = document.getElementById('clipboardBanner'); if (b) b.style.display = 'none'; updateUI(); }
+  function removeLabel(i) { if (editingSpineLabelIndex === i) { editingSpineLabelIndex = -1; syncSpineLabelEditControls(); } else if (editingSpineLabelIndex > i) editingSpineLabelIndex--; if (cQIdx === i) clearCopiedBuffer(); selInd.delete(i); lblQ.splice(i, 1); updateUI(); saveProgress(); }
+  function toggleSelectLabel(i, cb) { if (cb.checked) selInd.add(i); else selInd.delete(i); document.getElementById('btnDeleteSelected').disabled = (selInd.size === 0); document.getElementById('selectAllCheckbox').checked = (selInd.size === lblQ.length); }
+  function toggleSelectAll(cb) { if (cb.checked) { for (var i = 0; i < lblQ.length; i++) selInd.add(i); } else selInd.clear(); updateUI(); }
+  function deleteSelectedLabels() { if (selInd.size === 0) return; if (editingSpineLabelIndex >= 0 && selInd.has(editingSpineLabelIndex)) { editingSpineLabelIndex = -1; syncSpineLabelEditControls(); } var nQ = []; for (var i = 0; i < lblQ.length; i++) if (!selInd.has(i)) nQ.push(lblQ[i]); lblQ = nQ; selInd.clear(); clearCopiedBuffer(); updateUI(); saveProgress(); }
+
+  function clearQueue() {
+    editingSpineLabelIndex = -1; syncSpineLabelEditControls(); lblQ = []; selInd.clear(); stSl = 0; clearCopiedBuffer();
+    var ids = ['section','classNum','cutter','spineVolume','year','spineCopy','spineLexileLevel','accession'];
+    for (var i = 0; i < ids.length; i++) { var el = document.getElementById(ids[i]); if (el) el.value = (ids[i] === 'section') ? 'Fic' : ''; }
+    updateUI(); saveProgress(); updateSpineLivePreview();
+    showToast('Spine label queue reset.', 'info');
+  }
+
+  function handleSlotClick(idx, e) {
+    var qI = idx - stSl;
+    if (e.shiftKey && cLbl) {
+      if (idx < stSl) { var diff = stSl - idx - 1; for (var i = 0; i < diff; i++) lblQ.unshift({ sec: '', cls: '', cut: '', vol: '', yr: '', copy: '', lexile: '', acc: '' }); lblQ.unshift(Object.assign({}, cLbl)); stSl = idx; }
+      else { while (lblQ.length < qI) lblQ.push({ sec: '', cls: '', cut: '', vol: '', yr: '', copy: '', lexile: '', acc: '' }); lblQ[qI] = Object.assign({}, cLbl); }
+      updateUI(); saveProgress(); return;
+    }
+    if (qI >= 0 && qI < lblQ.length) { selectForCopy(qI); return; }
+    stSl = idx; updateUI(); saveProgress();
+  }
+
+  function updateUI() {
+    var c = document.getElementById('pagesContainer'); if (!c) return;
+    var tot = Math.ceil(Math.max(1, stSl + lblQ.length) / SPL); c.innerHTML = '';
+    for (var p = 0; p < tot; p++) {
+      var w = document.createElement('div'); w.className = 'sheet-wrapper';
+      w.innerHTML = '<div class="page-header-indicator"><span>PAGE ' + (p + 1) + ' OF ' + tot + '</span><span>(Slots ' + (p * SPL + 1) + ' - ' + ((p + 1) * SPL) + ')</span></div>';
+      var g = document.createElement('div'); g.className = 'sheet-grid';
+      for (var s = 0; s < SPL; s++) {
+        var gI = p * SPL + s; var sl = document.createElement('div'); sl.className = 'label-slot';
+        if (gI === stSl) sl.classList.add('start-point');
+        sl.onclick = (function (index) { return function (e) { handleSlotClick(index, e); }; })(gI);
+        var qI = gI - stSl;
+        if (qI >= 0 && qI < lblQ.length) {
+          sl.classList.add('occupied'); if (cQIdx === qI) sl.classList.add('copied-source');
+          var itm = lblQ[qI];
+          sl.classList.add('spine-editable-slot');
+          sl.innerHTML = renderLabelHTML(itm) + '<button type="button" class="spine-preview-edit-btn" title="Edit this label" onclick="event.stopPropagation(); editSpineLabel(' + qI + ')">Edit</button>';
+        }
+        g.appendChild(sl);
+      }
+      w.appendChild(g); c.appendChild(w);
+    }
+    fitAllSpineLabels(c);
+    var qL = document.getElementById('queueList');
+    if (qL) {
+      qL.innerHTML = '';
+      for (var j = 0; j < lblQ.length; j++) {
+        var itm = lblQ[j]; var r = document.createElement('div'); r.className = 'queue-item' + (cQIdx === j ? ' active-item' : '');
+        var labelText = [itm.sec, itm.cls, itm.cut, itm.vol, itm.yr, formatSpineCopy_(itm.copy), itm.lexile, itm.acc].filter(Boolean).join(' ');
+        r.innerHTML = '<input type="checkbox" ' + (selInd.has(j) ? 'checked' : '') + ' onchange="toggleSelectLabel(' + j + ',this)"><span title="' + labelText + '" onclick="selectForCopy(' + j + ')">' + (j + 1) + '. ' + labelText + '</span><div class="item-actions"><button type="button" onclick="copyCallNumberOnly(' + j + ')">Call No</button><button type="button" onclick="duplicateItem(' + j + ')">Copy</button><button type="button" onclick="removeLabel(' + j + ')">Del</button></div>';
+        qL.appendChild(r);
+      }
+    }
+    if (document.getElementById('queueCount')) document.getElementById('queueCount').textContent = lblQ.length;
+    if (document.getElementById('btnDeleteSelected')) document.getElementById('btnDeleteSelected').disabled = (selInd.size === 0);
+    updateSpineLivePreview();
+  }
+
+  function quickPullByAccession() {
+    var a = document.getElementById('labelAccQuick') ? document.getElementById('labelAccQuick').value.trim() : ''; if (!a) return;
+    var b = document.getElementById('btnAccQuick'); if (b) { b.disabled = true; b.textContent = '...'; }
     google.script.run.withSuccessHandler(function (r) {
       if (b) { b.disabled = false; b.textContent = 'Fetch'; }
       if (r && r.success) {
@@ -11694,28 +12030,19 @@ html body > main { margin-top: 0 !important; padding-top: 0 !important; }
           acc: r.data.accession || a,
           style: getSpineSettings()
         });
-        updateUI();
-        saveProgress();
-        updateSpineLivePreview();
+        updateUI(); saveProgress(); updateSpineLivePreview();
         document.getElementById('labelAccQuick').value = '';
         document.getElementById('labelAccQuick').focus();
         showToast('Added to label preview: ' + (r.data.title || a), 'success');
-      } else {
-        showToast((r && r.message) || 'Accession not found.', 'error');
-        document.getElementById('labelAccQuick').select();
-      }
-    }).withFailureHandler(function (e) {
-      if (b) { b.disabled = false; b.textContent = 'Fetch'; }
-      showToast(e.message, 'error');
-    }).fetchSpineLabelByAccession(a);
-  };
+      } else { showToast((r && r.message) || 'Accession not found.', 'error'); document.getElementById('labelAccQuick').select(); }
+    }).withFailureHandler(function (e) { if (b) { b.disabled = false; b.textContent = 'Fetch'; } showToast(e.message, 'error'); }).fetchSpineLabelByAccession(a);
+  }
 
-  window.quickPullByRange = function () {
+  function quickPullByRange() {
     var sa = (document.getElementById('rangeStartAcc') || {}).value.trim();
     var ea = (document.getElementById('rangeEndAcc') || {}).value.trim();
     if (!sa || !ea) return showToast('Enter both the starting and ending accession numbers.', 'error');
-    var b = document.getElementById('btnRangeQuick');
-    if (b) { b.disabled = true; b.textContent = 'Loading...'; }
+    var b = document.getElementById('btnRangeQuick'); if (b) { b.disabled = true; b.textContent = 'Loading...'; }
     google.script.run.withSuccessHandler(function (r) {
       if (b) { b.disabled = false; b.textContent = 'Queue'; }
       if (!r || !r.success || !Array.isArray(r.labels) || !r.labels.length) {
@@ -11737,70 +12064,68 @@ html body > main { margin-top: 0 !important; padding-top: 0 !important; }
         });
       }
       showToast('Added ' + r.labels.length + ' labels to the queue.', 'success');
-      updateUI();
-      saveProgress();
-    }).withFailureHandler(function (e) {
-      if (b) { b.disabled = false; b.textContent = 'Queue'; }
-      showToast('Range lookup failed: ' + (e && e.message ? e.message : e), 'error');
-    }).fetchSpineLabelsByRange(sa, ea);
-  };
+      updateUI(); saveProgress();
+    }).withFailureHandler(function (e) { if (b) { b.disabled = false; b.textContent = 'Queue'; } showToast('Range lookup failed: ' + (e && e.message ? e.message : e), 'error'); }).fetchSpineLabelsByRange(sa, ea);
+  }
 
-  window.addLabel = function (lexileLookupCompleted) {
-    function gv(id) { var el = document.getElementById(id); return el ? el.value.trim() : ''; }
-    var s = gv('section'), c = gv('classNum'), t = gv('cutter'), v = gv('spineVolume'), y = gv('year'), cp = gv('spineCopy'), lx = gv('spineLexileLevel'), a = gv('accession');
-    if (a && !lx && !lexileLookupCompleted) {
-      if (spineLexileLookupPending) return;
-      spineLexileLookupPending = true;
-      autoFetchSpineLexileForAccession(a, function (level) {
-        spineLexileLookupPending = false;
-        if (level) showToast('Lexile level found: ' + level, 'success', 1800);
-        addLabel(true);
-      });
-      return;
-    }
-    if (!s && !c && !t && !v && !y && !cp && !lx && !a) return;
-    var updatedLabel = { sec: s, cls: c, cut: t, vol: v, yr: y, copy: cp, lexile: lx, acc: a, style: getSpineSettings() };
-    var wasEditing = editingSpineLabelIndex >= 0;
-    if (wasEditing && editingSpineLabelIndex < lblQ.length) lblQ[editingSpineLabelIndex] = updatedLabel;
-    else lblQ.push(updatedLabel);
-    editingSpineLabelIndex = -1;
-    syncSpineLabelEditControls();
-    var ids = ['section','classNum','cutter','spineVolume','year','spineCopy','spineLexileLevel','accession'];
-    for (var i = 0; i < ids.length; i++) {
-      var el = document.getElementById(ids[i]);
-      if (el) el.value = (ids[i] === 'section') ? 'Fic' : '';
-    }
-    document.getElementById('labelAccQuick').focus();
-    updateUI();
-    saveProgress();
+  function sendToSpineMaker() {
+    var a = document.getElementById('bookAccession').value.trim();
+    if (!a) return showToast('Need Accession', 'error');
+    document.getElementById('section').value = document.getElementById('bookSection').value;
+    document.getElementById('classNum').value = document.getElementById('bookClassNum').value;
+    document.getElementById('cutter').value = document.getElementById('bookCutter').value;
+    document.getElementById('spineVolume').value = document.getElementById('bookVolume').value;
+    document.getElementById('year').value = document.getElementById('bookYear').value;
+    document.getElementById('spineCopy').value = document.getElementById('bookCopyNumber').value;
+    document.getElementById('spineLexileLevel').value = document.getElementById('bookLexileLevel').value;
+    document.getElementById('accession').value = a;
+    switchTab('labels');
     updateSpineLivePreview();
-    showToast(wasEditing ? 'Label changes saved' : 'Label added', 'success', 2000);
-  };
+    showToast('Transferred to Spine Labels', 'info');
+  }
 
-  window.editSpineLabel = function (index) {
-    if (index < 0 || index >= lblQ.length) return;
-    var item = lblQ[index];
-    editingSpineLabelIndex = index;
-    var ids = ['section','classNum','cutter','spineVolume','year','spineCopy','spineLexileLevel','accession'];
-    var vals = [item.sec, item.cls, item.cut, item.vol, item.yr, item.copy, item.lexile, item.acc];
-    for (var i = 0; i < ids.length; i++) {
-      var field = document.getElementById(ids[i]);
-      if (field) field.value = vals[i] || '';
-    }
-    syncSpineLabelEditControls();
-    updateSpineLivePreview();
-  };
+  window.formatSpineCopy_ = formatSpineCopy_;
+  window.getSpineSettings = getSpineSettings;
+  window.renderLabelHTML = renderLabelHTML;
+  window.updateSpineLivePreview = updateSpineLivePreview;
+  window.fitAllSpineLabels = fitAllSpineLabels;
+  window.loadSpineLabelStyle = loadSpineLabelStyle;
+  window.toggleGuides = toggleGuides;
+  window.saveProgress = saveProgress;
+  window.applySpineProgressData = applySpineProgressData;
+  window.loadProgress = loadProgress;
+  window.syncSpineLabelEditControls = syncSpineLabelEditControls;
+  window.autoFetchSpineLexileForAccession = autoFetchSpineLexileForAccession;
+  window.addLabel = addLabel;
+  window.editSpineLabel = editSpineLabel;
+  window.cancelEditSpineLabel = cancelEditSpineLabel;
+  window.duplicateItem = duplicateItem;
+  window.copyCallNumberOnly = copyCallNumberOnly;
+  window.selectForCopy = selectForCopy;
+  window.pasteToNextSlot = pasteToNextSlot;
+  window.clearCopiedBuffer = clearCopiedBuffer;
+  window.removeLabel = removeLabel;
+  window.toggleSelectLabel = toggleSelectLabel;
+  window.toggleSelectAll = toggleSelectAll;
+  window.deleteSelectedLabels = deleteSelectedLabels;
+  window.clearQueue = clearQueue;
+  window.handleSlotClick = handleSlotClick;
+  window.updateUI = updateUI;
+  window.quickPullByAccession = quickPullByAccession;
+  window.quickPullByRange = quickPullByRange;
+  window.sendToSpineMaker = sendToSpineMaker;
 
-  ['spineVolume', 'spineCopy'].forEach(function (id) {
+  ['section','classNum','cutter','spineVolume','year','spineCopy','spineLexileLevel','accession'].forEach(function (id) {
     var el = document.getElementById(id);
-    if (el) {
+    if (el && !el.dataset.spineBound) {
+      el.dataset.spineBound = '1';
       el.addEventListener('keydown', function (e) { if (e.key === 'Enter') addLabel(); });
       el.addEventListener('input', function () { saveProgress(); updateSpineLivePreview(); });
     }
   });
 
-  if (typeof updateUI === 'function') updateUI();
-  if (typeof updateSpineLivePreview === 'function') updateSpineLivePreview();
+  if (typeof currentStaff !== 'undefined' && currentStaff) loadProgress();
+  else { updateUI(); updateSpineLivePreview(); }
 })();
 </script>
 </body>
