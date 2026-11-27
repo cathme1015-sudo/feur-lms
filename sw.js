@@ -1,4 +1,4 @@
-const CACHE_NAME = "feur-lms-shell-v23";
+const CACHE_NAME = "feur-lms-shell-v24";
 const CORE_ASSETS = [
   "./",
   "./index.html",
